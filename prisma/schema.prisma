@@ -1,0 +1,100 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// 作品类型枚举
+enum WorkType {
+  NOVEL       // 小说
+  MANGA       // 漫画
+  ANIME       // 动画
+  GAME        // 游戏
+  MOVIE       // 电影
+  TV_SERIES   // 电视剧
+  MUSIC       // 音乐/歌曲
+  OTHER       // 其他
+}
+
+// 证据状态枚举
+enum EvidenceStatus {
+  PENDING     // 待审核
+  APPROVED    // 已通过
+  REJECTED    // 已拒绝
+}
+
+model Work {
+  id          String    @id @default(cuid())
+  title       String    // 作品标题
+  type        WorkType  // 作品类型
+  description String?   // 简介
+  coverUrl    String?   // 封面图
+  isCentral   Boolean   @default(false) // 是否为中心作品
+  
+  // 关系
+  connectionsFrom Connection[] @relation("FromWork")
+  connectionsTo   Connection[] @relation("ToWork")
+  evidences       Evidence[]
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Connection {
+  id          String    @id @default(cuid())
+  
+  // 联动关系：从 A 到 B
+  fromWorkId  String
+  fromWork    Work      @relation("FromWork", fields: [fromWorkId], references: [id])
+  
+  toWorkId    String
+  toWork      Work      @relation("ToWork", fields: [toWorkId], references: [id])
+  
+  // 联动描述（如"改编自"、"衍生作"、"客串"等）
+  relationType String  // "adaptation", "spin_off", "crossover", "reference", "inspired"
+  description  String? // 详细说明
+  
+  // 层级（自动计算）
+  level       Int       @default(1) // 1 = 一级子节点
+  
+  // 证据（必须至少有一个通过才能显示联动）
+  evidences   Evidence[]
+  
+  // 唯一约束：同一对作品同一关系类型只能有一条
+  @@unique([fromWorkId, toWorkId, relationType])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Evidence {
+  id            String        @id @default(cuid())
+  
+  // 关联的作品联动
+  connectionId  String
+  connection    Connection    @relation(fields: [connectionId], references: [id])
+  
+  // 关联的作品（可选，方便查询）
+  workId       String?
+  work         Work?         @relation(fields: [workId], references: [id])
+  
+  // 证据内容
+  type          String        // "link" | "file"
+  url           String?       // 链接 URL
+  fileUrl       String?       // 上传的文件 URL
+  fileName      String?       // 原始文件名
+  description   String?       // 证据描述
+  
+  // 审核状态
+  status        EvidenceStatus @default(PENDING)
+  rejectReason  String?       // 拒绝原因
+  
+  submittedBy   String?       // 提交者（可选）
+  
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
