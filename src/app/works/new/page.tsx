@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 const WORK_TYPES = [
@@ -17,17 +17,23 @@ const WORK_TYPES = [
 
 export default function NewWorkPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const isCentral = searchParams.get('central') === 'true'
   
   const [form, setForm] = useState({
     title: '',
     type: 'novel',
     description: '',
     coverUrl: '',
-    isCentral: isCentral
+    isCentral: false
   })
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const isCentral = params.get('central') === 'true'
+    if (isCentral) {
+      setForm((prev) => ({ ...prev, isCentral: true }))
+    }
+  }, [])
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -39,10 +45,12 @@ export default function NewWorkPage() {
       body: JSON.stringify(form)
     })
     
+    const data = await res.json()
+    
     if (res.ok) {
       router.push('/works')
     } else {
-      alert('创建失败')
+      alert(data.error || '创建失败')
     }
     
     setLoading(false)

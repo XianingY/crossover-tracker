@@ -2,11 +2,16 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { GraphView } from '@/components/GraphView'
+import dynamic from 'next/dynamic'
+import { useRouter } from 'next/navigation'
+
+const GraphView = dynamic(() => import('@/components/GraphView').then((m) => m.GraphView), {
+  ssr: false,
+})
 
 export default function HomePage() {
+  const router = useRouter()
   const [centralWorkId, setCentralWorkId] = useState<string>('')
-  const [selectedWorkId, setSelectedWorkId] = useState<string>('')
   
   useEffect(() => {
     // 获取中心作品
@@ -24,9 +29,7 @@ export default function HomePage() {
   }, [])
   
   const handleNodeClick = (workId: string) => {
-    setSelectedWorkId(workId)
-    // 跳转到作品详情页
-    window.location.href = `/works/${workId}`
+    router.push(`/works/${workId}`)
   }
   
   return (
