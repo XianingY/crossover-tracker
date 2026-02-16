@@ -1,8 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { Card } from '@/components/ui/Card'
+import { Input } from '@/components/ui/Input'
+import { Button } from '@/components/ui/Button'
 
 const WORK_TYPES = [
   { value: 'novel', label: '小说' },
@@ -23,21 +26,15 @@ export default function NewWorkPage() {
     type: 'novel',
     description: '',
     coverUrl: '',
-    isCentral: false
+    isCentral: typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('central') === 'true'
   })
   const [loading, setLoading] = useState(false)
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const isCentral = params.get('central') === 'true'
-    if (isCentral) {
-      setForm((prev) => ({ ...prev, isCentral: true }))
-    }
-  }, [])
+  const [errorMessage, setErrorMessage] = useState('')
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+    setErrorMessage('')
     
     const res = await fetch('/api/works', {
       method: 'POST',
@@ -50,84 +47,111 @@ export default function NewWorkPage() {
     if (res.ok) {
       router.push('/works')
     } else {
-      alert(data.error || '创建失败')
+      setErrorMessage(data.error || '创建失败，请稍后重试')
     }
     
     setLoading(false)
   }
   
   return (
-    <div className="min-h-screen p-4 max-w-2xl mx-auto">
-      <header className="flex items-center gap-4 mb-6">
-        <Link href="/works" className="text-gray-500 hover:text-gray-700">← 返回</Link>
-        <h1 className="text-2xl font-bold text-gray-800">新建作品</h1>
+    <div className="mx-auto max-w-3xl px-4 py-8 md:px-8">
+      <header className="mb-6 flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium tracking-wide text-slate-500">NEW WORK</p>
+          <h1 className="text-3xl font-semibold text-slate-900">新建作品</h1>
+        </div>
+        <Link href="/works" className="text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 rounded">返回列表</Link>
       </header>
-      
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block mb-1 font-medium text-gray-700">作品标题</label>
-          <input
-            type="text"
-            value={form.title}
-            onChange={e => setForm({ ...form, title: e.target.value })}
-            className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-            required
-          />
-        </div>
-        
-        <div>
-          <label className="block mb-1 font-medium text-gray-700">作品类型</label>
-          <select
-            value={form.type}
-            onChange={e => setForm({ ...form, type: e.target.value })}
-            className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {WORK_TYPES.map(t => (
-              <option key={t.value} value={t.value}>{t.label}</option>
-            ))}
-          </select>
-        </div>
-        
-        <div>
-          <label className="block mb-1 font-medium text-gray-700">简介</label>
-          <textarea
-            value={form.description}
-            onChange={e => setForm({ ...form, description: e.target.value })}
-            className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-            rows={4}
-          />
-        </div>
-        
-        <div>
-          <label className="block mb-1 font-medium text-gray-700">封面图 URL</label>
-          <input
-            type="url"
-            value={form.coverUrl}
-            onChange={e => setForm({ ...form, coverUrl: e.target.value })}
-            className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="https://..."
-          />
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            id="isCentral"
-            checked={form.isCentral}
-            onChange={e => setForm({ ...form, isCentral: e.target.checked })}
-            className="w-4 h-4"
-          />
-          <label htmlFor="isCentral" className="text-gray-700">设为中心作品</label>
-        </div>
-        
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full py-3 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 transition"
-        >
-          {loading ? '创建中...' : '创建作品'}
-        </button>
-      </form>
+
+      <div className="grid gap-6 md:grid-cols-[1fr_220px]">
+        <Card className="bg-white/95">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <Input
+              label="作品标题"
+              type="text"
+              value={form.title}
+              onChange={e => setForm({ ...form, title: e.target.value })}
+              required
+              placeholder="例如：命运石之门"
+            />
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">作品类型</label>
+              <select
+                value={form.type}
+                onChange={e => setForm({ ...form, type: e.target.value })}
+                className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                {WORK_TYPES.map(t => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">简介</label>
+              <textarea
+                value={form.description}
+                onChange={e => setForm({ ...form, description: e.target.value })}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                rows={4}
+                placeholder="简要介绍作品背景、内容或特色"
+              />
+            </div>
+
+            <Input
+              label="封面图 URL"
+              type="url"
+              value={form.coverUrl}
+              onChange={e => setForm({ ...form, coverUrl: e.target.value })}
+              placeholder="https://..."
+            />
+
+            <label className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                id="isCentral"
+                checked={form.isCentral}
+                onChange={e => setForm({ ...form, isCentral: e.target.checked })}
+                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              设为中心作品
+            </label>
+
+            {errorMessage && (
+              <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600">{errorMessage}</p>
+            )}
+
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full"
+              size="lg"
+            >
+              {loading ? '创建中...' : '创建作品'}
+            </Button>
+          </form>
+        </Card>
+
+        <Card className="bg-white/90 p-4">
+          <h2 className="text-sm font-semibold text-slate-800">封面预览</h2>
+          <div className="mt-3 aspect-[3/4] overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+            {form.coverUrl ? (
+              <div
+                className="h-full w-full bg-cover bg-center"
+                style={{ backgroundImage: `url(${form.coverUrl})` }}
+                aria-label="封面预览"
+                role="img"
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-xs text-slate-500">输入 URL 后显示预览</div>
+            )}
+          </div>
+          <p className="mt-3 text-xs leading-relaxed text-slate-500">
+            建议使用清晰的竖版封面图，比例接近 3:4，可获得更好的展示效果。
+          </p>
+        </Card>
+      </div>
     </div>
   )
 }

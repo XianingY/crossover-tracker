@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { Card } from '@/components/ui/Card'
+import { Input } from '@/components/ui/Input'
+import { Button } from '@/components/ui/Button'
 
 interface Work {
   id: string
@@ -61,91 +64,107 @@ export default function WorksPage() {
   }
   
   return (
-    <div className="min-h-screen p-4 max-w-4xl mx-auto">
-      <header className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">作品管理</h1>
+    <div className="mx-auto max-w-6xl px-4 py-8 md:px-8">
+      <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-sm font-medium tracking-wide text-slate-500">WORKS</p>
+          <h1 className="text-3xl font-semibold text-slate-900">作品管理</h1>
+          <p className="mt-1 text-sm text-slate-600">按类型筛选、搜索并维护作品库。</p>
+        </div>
         <Link
           href="/works/new"
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+          className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
         >
           添加作品
         </Link>
       </header>
-      
-      {/* 搜索和筛选 */}
-      <div className="flex gap-4 mb-6">
-        <input
-          type="text"
-          placeholder="搜索作品..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="flex-1 px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+
+      <Card className="mb-6 bg-white/90 p-4">
+        <div className="grid gap-3 md:grid-cols-[1fr_220px]">
+          <Input
+            type="text"
+            placeholder="搜索作品标题..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
         <select
           value={typeFilter}
           onChange={e => setTypeFilter(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
         >
           <option value="">全类型</option>
           {Object.entries(WORK_TYPE_LABELS).map(([value, label]) => (
             <option key={value} value={value.toLowerCase()}>{label}</option>
           ))}
         </select>
-      </div>
-      
-      {/* 作品列表 */}
-      <div className="space-y-4">
+        </div>
+      </Card>
+
+      <div className="grid gap-4">
         {works.map(work => (
-          <div
+          <Card
             key={work.id}
-            className="flex items-center justify-between p-4 bg-white rounded-lg shadow border border-gray-200"
+            className="bg-white/95 p-5"
           >
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
-                <h3 className="font-semibold text-lg text-gray-800">
-                  {work.title}
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-lg font-semibold text-slate-900">{work.title}</h3>
                   {work.isCentral && (
-                    <span className="ml-2 text-xs bg-red-500 text-white px-2 py-0.5 rounded">
-                      中心
+                    <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-700">
+                      中心作品
                     </span>
                   )}
-                </h3>
-                <p className="text-sm text-gray-500">{WORK_TYPE_LABELS[work.type] || work.type}</p>
-                <p className="text-xs text-gray-400">
-                  联动: {work._count.connectionsFrom} 出 / {work._count.connectionsTo} 入
+                </div>
+                <p className="mt-1 text-sm text-slate-600">{WORK_TYPE_LABELS[work.type] || work.type}</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  联动统计: 出向 {work._count.connectionsFrom} / 入向 {work._count.connectionsTo}
                 </p>
               </div>
-            </div>
-            
-            <div className="flex gap-2">
-              {!work.isCentral && (
-                <button
-                  onClick={() => setCentral(work.id)}
-                  className="px-3 py-1 text-sm bg-yellow-500 text-white rounded hover:bg-yellow-600 transition"
+
+              <div className="flex flex-wrap gap-2">
+                {!work.isCentral && (
+                  <Button
+                    variant="warning"
+                    size="sm"
+                    onClick={() => setCentral(work.id)}
+                  >
+                    设为中心
+                  </Button>
+                )}
+                <Link
+                  href={`/works/${work.id}`}
+                  className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
                 >
-                  设为中心
-                </button>
-              )}
-              <Link
-                href={`/works/${work.id}`}
-                className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition"
-              >
-                详情
-              </Link>
-              <button
-                onClick={() => handleDelete(work.id)}
-                className="px-3 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600 transition"
-              >
-                删除
-              </button>
+                  查看详情
+                </Link>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => handleDelete(work.id)}
+                >
+                  删除
+                </Button>
+              </div>
             </div>
-          </div>
+          </Card>
         ))}
-        
-        {works.length === 0 && (
-          <p className="text-center text-gray-500 py-8">暂无作品</p>
-        )}
       </div>
+
+      {works.length === 0 && (
+        <Card className="mt-4 border-dashed border-slate-300 bg-white/80 py-12 text-center">
+          <h3 className="text-lg font-semibold text-slate-800">暂无作品</h3>
+          <p className="mt-1 text-sm text-slate-600">先创建第一部作品，开始构建联动网络。</p>
+          <div className="mt-4">
+            <Link
+              href="/works/new"
+              className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+            >
+              创建作品
+            </Link>
+          </div>
+        </Card>
+      )}
     </div>
   )
 }
