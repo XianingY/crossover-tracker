@@ -1,7 +1,7 @@
 # PROJECT KNOWLEDGE BASE
 
 **Generated:** 2026-02-16
-**Commit:** c3973ae
+**Commit:** 4a59b78
 **Branch:** feature/crossover-tracker
 
 ## OVERVIEW
@@ -12,6 +12,7 @@ Crossover tracker webapp for managing cross-media work connections (novels, mang
 ./
 ├── src/
 │   ├── app/           # Next.js App Router (pages + API)
+│   │   ├── evidences/new/ # Evidence submission page
 │   ├── components/    # React components
 │   ├── lib/           # Shared clients (Prisma singleton)
 │   └── services/      # Graph/domain services
@@ -26,6 +27,7 @@ Crossover tracker webapp for managing cross-media work connections (novels, mang
 | Database models | `prisma/schema.prisma` | Work, Connection, Evidence |
 | API routes | `src/app/api/` | CRUD + graph + recalculate |
 | UI pages | `src/app/*.tsx` | Home, works, admin |
+| Evidence submission | `src/app/evidences/new/page.tsx` | Submit link/file evidence by `connectionId` |
 | Domain service | `src/services/graph.service.ts` | Level recalculation (BFS) |
 | Graph visualization | `src/components/GraphView.tsx` | D3 + react-force-graph |
 
@@ -41,6 +43,7 @@ Crossover tracker webapp for managing cross-media work connections (novels, mang
 - **API Response**: Success returns raw JSON (array/object); failures return `{ error }` + HTTP status
 - **DB Client**: Use singleton `src/lib/prisma.ts`
 - **Routing**: Nested routes in `src/app/`
+- **Back Navigation UI**: Use compact inline back link style (`inline-flex`, border, left arrow)
 
 ## ANTI-PATTERNS (THIS PROJECT)
 - **Type evasion (`any`)**: Exists in `src/app/api/graph/route.ts` - bypasses type safety
@@ -61,6 +64,9 @@ npx prisma studio # DB GUI
 ```
 
 ## NOTES
+- Evidence submission UI now exists at `/evidences/new?connectionId=<id>`
+- Cover rendering uses `<img>` with `referrerPolicy="no-referrer"` in new/detail/home views
+- Combobox search input text color is explicitly set to avoid white-on-white display
 - Missing `prisma generate` in build script - may fail in CI
 - No testing framework configured
 - No CI/CD pipeline (use Vercel)
