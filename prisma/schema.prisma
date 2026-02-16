@@ -8,6 +8,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // 作品类型枚举
@@ -87,13 +88,16 @@ model Evidence {
   // 证据内容
   type          String        // "link" | "file"
   url           String?       // 链接 URL
-  fileUrl       String?       // 上传的文件 URL
+  fileUrl       String?       // 文件临时访问 URL（可空）
+  storagePath   String?       // 私有桶文件路径
   fileName      String?       // 原始文件名
   description   String?       // 证据描述
   
   // 审核状态
   status        EvidenceStatus @default(PENDING)
   rejectReason  String?       // 拒绝原因
+  reviewedBy    String?       // 审核人（email）
+  reviewedAt    DateTime?     // 审核时间
   
   submittedBy   String?       // 提交者（可选）
   
@@ -101,9 +105,41 @@ model Evidence {
   source        String        @default("USER") // "USER" | "WEB" | "AI"
   aiConfidence  Float?        // AI分析置信度
   scrapedAt     DateTime?     // 证据抓取时间
+
+  reviewLogs    EvidenceReviewLog[]
+  uploadLogs    UploadAuditLog[]
   
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
   @@index([connectionId, status, createdAt])
+  @@index([storagePath])
+}
+
+model EvidenceReviewLog {
+  id            String         @id @default(cuid())
+  evidenceId     String
+  evidence       Evidence       @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  beforeStatus   EvidenceStatus
+  afterStatus    EvidenceStatus
+  reason         String?
+  reviewedBy     String?
+  reviewerUserId String?
+  reviewedAt     DateTime       @default(now())
+
+  @@index([evidenceId, reviewedAt])
+}
+
+model UploadAuditLog {
+  id          String    @id @default(cuid())
+  evidenceId  String?
+  evidence    Evidence? @relation(fields: [evidenceId], references: [id], onDelete: SetNull)
+  storagePath String
+  uploader    String?
+  uploaderId  String?
+  ipAddress   String?
+  uploadedAt  DateTime  @default(now())
+
+  @@index([storagePath, uploadedAt])
+  @@index([evidenceId])
 }

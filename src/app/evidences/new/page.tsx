@@ -58,6 +58,7 @@ export default function NewEvidencePage() {
       }
 
       let fileUrl = ''
+      let storagePath = ''
       let fileName = ''
 
       if (type === 'file') {
@@ -78,7 +79,8 @@ export default function NewEvidencePage() {
           throw new Error(uploadData.error || '文件上传失败')
         }
 
-        fileUrl = uploadData.url
+        fileUrl = uploadData.signedUrl
+        storagePath = uploadData.storagePath
         fileName = uploadData.filename
       }
 
@@ -94,6 +96,7 @@ export default function NewEvidencePage() {
           type,
           url: type === 'link' ? url.trim() : null,
           fileUrl: type === 'file' ? fileUrl : null,
+          storagePath: type === 'file' ? storagePath : null,
           fileName: type === 'file' ? fileName : null,
           description: description.trim() || null,
           submittedBy: submittedBy.trim() || null,

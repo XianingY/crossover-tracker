@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { getAuthenticatedAdmin } from '@/lib/admin-auth'
+import { prisma } from '@/lib/prisma'
 import { consumeRateLimit } from '@/lib/rate-limit'
+import { createSupabaseServiceRoleClient, EVIDENCE_BUCKET } from '@/lib/supabase-server'
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
 const UPLOAD_LIMIT_PER_10_MINUTES = 20
 const UPLOAD_WINDOW_MS = 10 * 60 * 1000
+const SIGNED_URL_EXPIRES_IN_SECONDS = 10 * 60
+
 const ALLOWED_TYPES = new Map<string, string>([
   ['image/jpeg', 'jpg'],
   ['image/png', 'png'],
@@ -12,18 +16,7 @@ const ALLOWED_TYPES = new Map<string, string>([
   ['application/pdf', 'pdf'],
 ])
 
-function getSupabase() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!supabaseUrl || !supabaseKey || supabaseUrl.includes('[YOUR-')) {
-    return null
-  }
-
-  return createClient(supabaseUrl, supabaseKey, {
-    auth: { persistSession: false },
-  })
-}
+let bucketChecked = false
 
 function getClientIp(request: NextRequest): string {
   const forwardedFor = request.headers.get('x-forwarded-for')
@@ -33,6 +26,30 @@ function getClientIp(request: NextRequest): string {
 
   const realIp = request.headers.get('x-real-ip')
   return realIp?.trim() || 'unknown'
+}
+
+async function ensurePrivateEvidenceBucket(
+  supabase: NonNullable<ReturnType<typeof createSupabaseServiceRoleClient>>
+): Promise<void> {
+  if (bucketChecked) return
+
+  const { data, error } = await supabase.storage.getBucket(EVIDENCE_BUCKET)
+  if (!error && data) {
+    bucketChecked = true
+    return
+  }
+
+  const createResult = await supabase.storage.createBucket(EVIDENCE_BUCKET, {
+    public: false,
+    fileSizeLimit: `${MAX_FILE_SIZE_BYTES}`,
+    allowedMimeTypes: Array.from(ALLOWED_TYPES.keys()),
+  })
+
+  if (createResult.error && !createResult.error.message.toLowerCase().includes('already')) {
+    throw new Error(createResult.error.message)
+  }
+
+  bucketChecked = true
 }
 
 async function matchesFileSignature(file: File): Promise<boolean> {
@@ -66,11 +83,10 @@ async function matchesFileSignature(file: File): Promise<boolean> {
   return false
 }
 
-// 文件上传 API
 export async function POST(request: NextRequest) {
   try {
     const ip = getClientIp(request)
-    const rateLimit = consumeRateLimit(
+    const rateLimit = await consumeRateLimit(
       `upload:${ip}`,
       UPLOAD_LIMIT_PER_10_MINUTES,
       UPLOAD_WINDOW_MS
@@ -88,7 +104,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = getSupabase()
+    const supabase = createSupabaseServiceRoleClient()
     if (!supabase) {
       return NextResponse.json(
         {
@@ -98,6 +114,8 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    await ensurePrivateEvidenceBucket(supabase)
 
     const formData = await request.formData()
     const fileEntry = formData.get('file')
@@ -120,29 +138,48 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid file content signature' }, { status: 400 })
     }
 
-    const filename = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.${extension}`
+    const storagePath = `${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.${extension}`
     const buffer = Buffer.from(await file.arrayBuffer())
-    const { error } = await supabase.storage.from('evidences').upload(filename, buffer, {
+    const uploadResult = await supabase.storage.from(EVIDENCE_BUCKET).upload(storagePath, buffer, {
       contentType: file.type,
       upsert: false,
     })
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (uploadResult.error) {
+      return NextResponse.json({ error: uploadResult.error.message }, { status: 500 })
     }
 
-    const { data: urlData } = supabase.storage.from('evidences').getPublicUrl(filename)
+    const signedResult = await supabase.storage
+      .from(EVIDENCE_BUCKET)
+      .createSignedUrl(storagePath, SIGNED_URL_EXPIRES_IN_SECONDS)
+
+    if (signedResult.error || !signedResult.data?.signedUrl) {
+      return NextResponse.json(
+        { error: signedResult.error?.message || 'Failed to create signed URL' },
+        { status: 500 }
+      )
+    }
+
+    const admin = await getAuthenticatedAdmin(request)
+    await prisma.uploadAuditLog.create({
+      data: {
+        evidenceId: null,
+        storagePath,
+        uploader: admin?.email || null,
+        uploaderId: admin?.id || null,
+        ipAddress: ip,
+      },
+    })
 
     return NextResponse.json({
-      url: urlData.publicUrl,
+      storagePath,
+      signedUrl: signedResult.data.signedUrl,
       filename: file.name,
+      expiresIn: SIGNED_URL_EXPIRES_IN_SECONDS,
     })
   } catch (error) {
     console.error('Evidence upload error:', error)
     const message = error instanceof Error ? error.message : 'Upload failed'
-    return NextResponse.json(
-      { error: message },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

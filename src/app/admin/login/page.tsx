@@ -9,7 +9,7 @@ export default function AdminLoginPage() {
   const nextPath = searchParams.get('next') || '/admin/evidences'
   const setupError = searchParams.get('error') === 'not_configured'
 
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -23,7 +23,7 @@ export default function AdminLoginPage() {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email, password }),
       })
       const data = await response.json()
 
@@ -49,7 +49,7 @@ export default function AdminLoginPage() {
 
         {setupError && (
           <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-            管理员账号未配置，请先设置 `ADMIN_USERNAME` 和 `ADMIN_PASSWORD`。
+            管理员鉴权未配置，请先设置 `NEXT_PUBLIC_SUPABASE_URL` 与 `NEXT_PUBLIC_SUPABASE_ANON_KEY`。
           </div>
         )}
 
@@ -61,16 +61,16 @@ export default function AdminLoginPage() {
 
         <form className="mt-5 space-y-4" onSubmit={handleSubmit}>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="username">
-              用户名
+            <label className="mb-1 block text-sm font-medium text-slate-700" htmlFor="email">
+              管理员邮箱
             </label>
             <input
-              id="username"
-              type="text"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
+              id="email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500"
-              autoComplete="username"
+              autoComplete="email"
               required
             />
           </div>

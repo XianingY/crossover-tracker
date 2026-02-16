@@ -43,7 +43,10 @@ export async function middleware(request: NextRequest) {
   if (!isAdminAuthConfigured()) {
     if (pathname.startsWith('/api')) {
       return NextResponse.json(
-        { error: 'Admin auth not configured. Set ADMIN_USERNAME and ADMIN_PASSWORD.' },
+        {
+          error:
+            'Admin auth not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.',
+        },
         { status: 503 }
       )
     }
