@@ -31,12 +31,30 @@ interface WorkCandidate {
   imageUrl?: string
 }
 
+interface SearchResults {
+  type?: 'identify' | 'image'
+  query?: string
+  workCandidates?: WorkCandidate[]
+  foundInDb?: Work[]
+  connections?: WorkConnection[]
+  imageAnalysis?: {
+    description: string
+    workName?: string
+  }
+  matchedWorks?: Work[]
+  suggestions?: unknown[]
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback
+}
+
 export default function SearchPage() {
   const router = useRouter()
   const [query, setQuery] = useState('')
   const [mode, setMode] = useState<'text' | 'image'>('text')
   const [loading, setLoading] = useState(false)
-  const [results, setResults] = useState<any>(null)
+  const [results, setResults] = useState<SearchResults | null>(null)
   const [error, setError] = useState('')
   const [selectedWork, setSelectedWork] = useState<WorkCandidate | null>(null)
 
@@ -50,15 +68,15 @@ export default function SearchPage() {
 
     try {
       const res = await fetch(`/api/ai/search?q=${encodeURIComponent(query)}&mode=identify`)
-      const data = await res.json()
+      const data = await res.json() as SearchResults & { error?: string }
 
       if (!res.ok) {
         throw new Error(data.error || 'Search failed')
       }
 
       setResults(data)
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      setError(getErrorMessage(err, 'Search failed'))
     } finally {
       setLoading(false)
     }
@@ -70,13 +88,15 @@ export default function SearchPage() {
 
     try {
       const res = await fetch(`/api/ai/search?q=${encodeURIComponent(work.name)}&mode=connections`)
-      const data = await res.json()
+      const data = await res.json() as { connections?: WorkConnection[]; error?: string }
 
       if (res.ok) {
-        setResults((prev: any) => ({ ...prev, connections: data.connections }))
+        setResults(prev => ({ ...(prev || {}), connections: data.connections || [] }))
+      } else {
+        throw new Error(data.error || 'Search failed')
       }
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      setError(getErrorMessage(err, 'Search failed'))
     } finally {
       setLoading(false)
     }
@@ -94,7 +114,12 @@ export default function SearchPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageUrl })
       })
-      const data = await res.json()
+      const data = await res.json() as {
+        analysis?: SearchResults['imageAnalysis']
+        matchedWorks?: Work[]
+        suggestions?: unknown[]
+        error?: string
+      }
 
       if (!res.ok) {
         throw new Error(data.error || 'Analysis failed')
@@ -106,8 +131,8 @@ export default function SearchPage() {
         matchedWorks: data.matchedWorks,
         suggestions: data.suggestions
       })
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      setError(getErrorMessage(err, 'Analysis failed'))
     } finally {
       setLoading(false)
     }
@@ -132,12 +157,12 @@ export default function SearchPage() {
       if (res.ok) {
         alert('联动关系已保存！')
       }
-    } catch (err: any) {
-      alert('保存失败: ' + err.message)
+    } catch (err) {
+      alert('保存失败: ' + getErrorMessage(err, 'Unknown error'))
     }
   }, [])
 
-  const findOrCreateWork = async (title: string) => {
+  const findOrCreateWork = async (title: string): Promise<Work> => {
     const res = await fetch(`/api/works?search=${encodeURIComponent(title)}`)
     const works: Work[] = await res.json()
 
@@ -151,7 +176,8 @@ export default function SearchPage() {
       body: JSON.stringify({ title, type: 'OTHER' })
     })
 
-    return createRes.json()
+    const createdWork = await createRes.json() as Work
+    return createdWork
   }
 
   const saveEvidence = useCallback(async (workA: string, workB: string) => {
@@ -161,13 +187,15 @@ export default function SearchPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workA, workB })
       })
-      const data = await res.json()
+      const data = await res.json() as { savedEvidence?: unknown[]; error?: string }
 
       if (res.ok) {
         alert(`已保存 ${data.savedEvidence?.length || 0} 条证据到审核队列`)
+      } else {
+        throw new Error(data.error || '保存证据失败')
       }
-    } catch (err: any) {
-      alert('保存证据失败: ' + err.message)
+    } catch (err) {
+      alert('保存证据失败: ' + getErrorMessage(err, 'Unknown error'))
     }
   }, [])
 
@@ -240,13 +268,13 @@ export default function SearchPage() {
 
       {results && !loading && (
         <div className="space-y-6">
-          {results.workCandidates?.length > 0 && (
+          {(results.workCandidates?.length ?? 0) > 0 && (
             <div>
               <h2 className="text-xl font-semibold text-slate-800 mb-4">
                 请选择你搜索的作品：
               </h2>
               <div className="space-y-2">
-                {results.workCandidates.map((work: WorkCandidate, i: number) => (
+                {results.workCandidates?.map((work: WorkCandidate, i: number) => (
                   <button
                     key={i}
                     onClick={() => handleWorkSelect(work)}
@@ -279,11 +307,11 @@ export default function SearchPage() {
             </div>
           )}
 
-          {results.foundInDb?.length > 0 && (
+          {(results.foundInDb?.length ?? 0) > 0 && (
             <div>
               <h2 className="text-xl font-semibold text-slate-800 mb-4">数据库中已存在</h2>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
-                {results.foundInDb.map((work: Work) => (
+                {results.foundInDb?.map((work: Work) => (
                   <button
                     key={work.id}
                     onClick={() => router.push(`/works/${work.id}`)}
@@ -297,13 +325,13 @@ export default function SearchPage() {
             </div>
           )}
 
-          {results.connections?.length > 0 && (
+          {(results.connections?.length ?? 0) > 0 && (
             <div>
               <h2 className="text-xl font-semibold text-slate-800 mb-4">
                 {selectedWork ? `《${selectedWork.name}》的联动作品` : '发现的联动关系'}
               </h2>
               <div className="space-y-3">
-                {results.connections.map((conn: WorkConnection, i: number) => (
+                {results.connections?.map((conn: WorkConnection, i: number) => (
                   <div
                     key={i}
                     className="p-4 bg-white border border-slate-200 rounded-lg"
@@ -392,11 +420,11 @@ export default function SearchPage() {
                 )}
               </div>
 
-              {results.matchedWorks?.length > 0 && (
+              {(results.matchedWorks?.length ?? 0) > 0 && (
                 <div>
                   <h3 className="font-medium text-slate-800 mb-2">数据库匹配</h3>
                   <div className="flex flex-wrap gap-2">
-                    {results.matchedWorks.map((work: Work) => (
+                    {results.matchedWorks?.map((work: Work) => (
                       <button
                         key={work.id}
                         onClick={() => router.push(`/works/${work.id}`)}

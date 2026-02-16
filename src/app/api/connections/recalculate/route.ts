@@ -16,10 +16,11 @@ export async function POST() {
     }
 
     return NextResponse.json(result)
-  } catch (error: any) {
+  } catch (error) {
     console.error('Recalculation failed:', error)
+    const message = error instanceof Error ? error.message : 'Internal server error during recalculation'
     return NextResponse.json(
-      { error: 'Internal server error during recalculation' },
+      { error: message },
       { status: 500 }
     )
   }
