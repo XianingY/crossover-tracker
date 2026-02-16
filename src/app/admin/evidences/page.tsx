@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 
@@ -19,6 +20,7 @@ interface Evidence {
 }
 
 export default function EvidencesAdminPage() {
+  const router = useRouter()
   const [evidences, setEvidences] = useState<Evidence[]>([])
   const [filter, setFilter] = useState('')
   const [loading, setLoading] = useState(true)
@@ -43,12 +45,23 @@ export default function EvidencesAdminPage() {
     
     setEvidences(evidences.filter(e => e.id !== id))
   }
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' })
+    router.replace('/admin/login')
+    router.refresh()
+  }
   
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 md:px-8">
       <header className="mb-6">
         <Link href="/" className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white/80 px-2.5 py-1 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2">← 返回图谱概览</Link>
-        <p className="text-sm font-medium tracking-wide text-slate-500">ADMIN</p>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-medium tracking-wide text-slate-500">ADMIN</p>
+          <Button variant="secondary" size="sm" onClick={handleLogout}>
+            退出登录
+          </Button>
+        </div>
         <h1 className="text-3xl font-semibold text-slate-900">证据审核</h1>
         <p className="mt-1 text-sm text-slate-600">统一处理待审核证据，保证联动关系可追溯。</p>
       </header>
