@@ -3,11 +3,22 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
 
 interface Work {
   id: string
   title: string
-  connectionsFrom: any[]
+  connectionsFrom: ConnectionItem[]
+}
+
+interface ConnectionItem {
+  id: string
+  relationType: string
+  level: number
+  description: string | null
+  evidences: { id: string }[]
+  toWork: { id: string; title: string }
 }
 
 interface AllWork {
@@ -66,7 +77,7 @@ export default function ConnectionsPage() {
     setWork(await res.json())
   }
   
-  if (!work) return <div className="min-h-screen p-4 text-center text-gray-500">加载中...</div>
+  if (!work) return <div className="px-4 py-10 text-center text-slate-500">加载中...</div>
   
   const RELATION_TYPES = [
     { value: 'crossover', label: '跨界联动' },
@@ -78,67 +89,74 @@ export default function ConnectionsPage() {
   ]
   
   return (
-    <div className="min-h-screen p-4 max-w-4xl mx-auto">
-      <header className="flex items-center gap-4 mb-6">
-        <Link href={`/works/${params.id}`} className="text-gray-500 hover:text-gray-700">← 返回</Link>
-        <h1 className="text-2xl font-bold text-gray-800">联动管理: {work.title}</h1>
+    <div className="mx-auto max-w-6xl px-4 py-8 md:px-8">
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <Link href={`/works/${params.id}`} className="text-sm font-medium text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 rounded">返回作品详情</Link>
+          <h1 className="mt-1 text-3xl font-semibold text-slate-900">联动管理: {work.title}</h1>
+        </div>
+        <Button
+          onClick={() => setShowForm(!showForm)}
+          variant={showForm ? 'secondary' : 'primary'}
+        >
+          {showForm ? '收起表单' : '添加联动'}
+        </Button>
       </header>
       
-      {/* 联动列表 */}
       <section className="mb-8">
-        <h2 className="text-xl font-semibold text-gray-800 mb-4">由此作品联动到</h2>
+        <h2 className="mb-4 text-xl font-semibold text-slate-900">由此作品联动到</h2>
         
-        <div className="space-y-2 mb-4">
-          {work.connectionsFrom.map((conn: any) => (
-            <div
-              key={conn.id}
-              className="flex items-center justify-between p-3 bg-white rounded shadow border border-gray-200"
-            >
+        <div className="grid gap-3">
+          {work.connectionsFrom.map((conn) => (
+            <Card key={conn.id} className="bg-white/95 p-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <span className="font-medium">{conn.toWork.title}</span>
-                <span className="ml-2 text-sm text-gray-500">
+                <span className="font-medium text-slate-900">{conn.toWork.title}</span>
+                <span className="ml-2 text-sm text-slate-500">
                   [{conn.relationType}] 级别: {conn.level}
                 </span>
                 {conn.description && (
-                  <p className="text-sm text-gray-400">{conn.description}</p>
+                  <p className="text-sm text-slate-500">{conn.description}</p>
                 )}
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-slate-500">
                   有效证据: {conn.evidences.length}
                 </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Link
                   href={`/evidences/new?connectionId=${conn.id}`}
-                  className="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600 transition"
+                  className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                 >
                   添加证据
                 </Link>
-                <button
+                <Button
                   onClick={() => handleDeleteConnection(conn.id)}
-                  className="px-3 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600 transition"
+                  variant="destructive"
+                  size="sm"
                 >
                   删除
-                </button>
+                </Button>
               </div>
-            </div>
+              </div>
+            </Card>
           ))}
+
+          {work.connectionsFrom.length === 0 && (
+            <Card className="border-dashed border-slate-300 bg-white/80 py-10 text-center text-slate-500">
+              暂无联动，点击“添加联动”开始创建。
+            </Card>
+          )}
         </div>
-        
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
-        >
-          添加联动
-        </button>
-        
+
         {showForm && (
-          <form onSubmit={handleCreateConnection} className="mt-4 p-4 bg-gray-50 rounded space-y-4">
+          <Card className="mt-5 bg-white/95 p-5">
+          <form onSubmit={handleCreateConnection} className="space-y-4">
             <div>
-              <label className="block mb-1 font-medium text-gray-700">联动到</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">联动到</label>
               <select
                 value={form.toWorkId}
                 onChange={e => setForm({ ...form, toWorkId: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 required
               >
                 <option value="">选择作品</option>
@@ -151,11 +169,11 @@ export default function ConnectionsPage() {
             </div>
             
             <div>
-              <label className="block mb-1 font-medium text-gray-700">联动类型</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">联动类型</label>
               <select
                 value={form.relationType}
                 onChange={e => setForm({ ...form, relationType: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 {RELATION_TYPES.map(t => (
                   <option key={t.value} value={t.value}>{t.label}</option>
@@ -164,31 +182,32 @@ export default function ConnectionsPage() {
             </div>
             
             <div>
-              <label className="block mb-1 font-medium text-gray-700">描述</label>
+              <label className="mb-1 block text-sm font-medium text-slate-700">描述</label>
               <textarea
                 value={form.description}
                 onChange={e => setForm({ ...form, description: e.target.value })}
-                className="w-full px-4 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 rows={2}
+                placeholder="如：动画改编自漫画，角色设定共享世界观"
               />
             </div>
             
             <div className="flex gap-2">
-              <button
+              <Button
                 type="submit"
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
               >
                 创建
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 onClick={() => setShowForm(false)}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition"
+                variant="secondary"
               >
                 取消
-              </button>
+              </Button>
             </div>
           </form>
+          </Card>
         )}
       </section>
     </div>

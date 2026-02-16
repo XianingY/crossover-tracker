@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { Card } from '@/components/ui/Card'
 
 interface Work {
   id: string
@@ -11,8 +12,23 @@ interface Work {
   description: string | null
   coverUrl: string | null
   isCentral: boolean
-  connectionsFrom: any[]
-  connectionsTo: any[]
+  connectionsFrom: OutgoingConnection[]
+  connectionsTo: IncomingConnection[]
+}
+
+interface OutgoingConnection {
+  id: string
+  relationType: string
+  level: number
+  description: string | null
+  evidences: { id: string }[]
+  toWork: { id: string; title: string }
+}
+
+interface IncomingConnection {
+  id: string
+  relationType: string
+  fromWork: { id: string; title: string }
 }
 
 const WORK_TYPE_LABELS: Record<string, string> = {
@@ -38,104 +54,104 @@ export default function WorkDetailPage() {
   }, [params.id])
   
   if (!work) {
-    return <div className="min-h-screen p-4 text-center text-gray-500">加载中...</div>
+    return <div className="px-4 py-10 text-center text-slate-500">加载中...</div>
   }
   
   return (
-    <div className="min-h-screen p-4 max-w-4xl mx-auto">
-      <header className="flex items-center gap-4 mb-6">
-        <Link href="/works" className="text-gray-500 hover:text-gray-700">← 返回</Link>
-        <h1 className="text-2xl font-bold text-gray-800">{work.title}</h1>
+    <div className="mx-auto max-w-6xl px-4 py-8 md:px-8">
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <Link href="/works" className="text-sm font-medium text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 rounded">返回作品列表</Link>
+          <h1 className="mt-1 text-3xl font-semibold text-slate-900">{work.title}</h1>
+        </div>
         {work.isCentral && (
-          <span className="text-xs bg-red-500 text-white px-2 py-0.5 rounded">中心作品</span>
+          <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-medium text-rose-700">中心作品</span>
         )}
       </header>
-      
-      {/* 作品信息 */}
-      <div className="bg-white rounded-lg shadow border border-gray-200 p-6 mb-6">
-        <div className="flex gap-6">
-          {work.coverUrl && (
-            <img
-              src={work.coverUrl}
-              alt={work.title}
-              className="w-32 h-44 object-cover rounded"
-            />
-          )}
-          <div>
-            <p className="text-gray-500 mb-2">类型: {WORK_TYPE_LABELS[work.type] || work.type}</p>
-            {work.description && (
-              <p className="text-gray-700">{work.description}</p>
+
+      <Card className="mb-6 bg-white/95 p-6">
+        <div className="flex flex-col gap-5 sm:flex-row">
+          <div className="h-44 w-32 flex-shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+            {work.coverUrl ? (
+              <div
+                className="h-full w-full bg-cover bg-center"
+                style={{ backgroundImage: `url(${work.coverUrl})` }}
+                aria-label={`${work.title} 封面`}
+                role="img"
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-xs text-slate-500">无封面</div>
             )}
           </div>
+          <div className="space-y-2">
+            <p className="text-sm text-slate-600">类型: {WORK_TYPE_LABELS[work.type] || work.type}</p>
+            {work.description && (
+              <p className="text-sm leading-relaxed text-slate-700">{work.description}</p>
+            )}
+            <div className="pt-1 text-xs text-slate-500">
+              出向联动 {work.connectionsFrom.length} / 入向联动 {work.connectionsTo.length}
+            </div>
+          </div>
         </div>
-      </div>
+      </Card>
       
-      {/* outgoing connections */}
       <section className="mb-8">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-gray-800">由此作品联动到</h2>
-          <Link
-            href={`/works/${work.id}/connections`}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
-          >
+          <h2 className="text-xl font-semibold text-slate-900">由此作品联动到</h2>
+          <Link href={`/works/${work.id}/connections`} className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2">
             管理联动
           </Link>
         </div>
         
-        <div className="space-y-2">
-          {work.connectionsFrom.map((conn: any) => (
-            <div
-              key={conn.id}
-              className="flex items-center justify-between p-3 bg-white rounded shadow border border-gray-200"
-            >
+        <div className="grid gap-3">
+          {work.connectionsFrom.map((conn) => (
+            <Card key={conn.id} className="bg-white/95 p-4">
               <div>
-                <span className="font-medium">{conn.toWork.title}</span>
-                <span className="ml-2 text-sm text-gray-500">
+                <span className="font-medium text-slate-900">{conn.toWork.title}</span>
+                <span className="ml-2 text-sm text-slate-500">
                   [{conn.relationType}] 级别: {conn.level}
                 </span>
                 {conn.description && (
-                  <p className="text-sm text-gray-400">{conn.description}</p>
+                  <p className="text-sm text-slate-500">{conn.description}</p>
                 )}
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-slate-500">
                   有效证据: {conn.evidences.length}
                 </p>
               </div>
-            </div>
+            </Card>
           ))}
           
           {work.connectionsFrom.length === 0 && (
-            <p className="text-gray-500 text-center py-4">暂无联动</p>
+            <Card className="border-dashed border-slate-300 bg-white/80 py-10 text-center text-slate-500">暂无联动</Card>
           )}
         </div>
       </section>
       
-      {/* incoming connections */}
       <section>
-        <h2 className="text-xl font-semibold text-gray-800 mb-4">联动到此作品</h2>
+        <h2 className="mb-4 text-xl font-semibold text-slate-900">联动到此作品</h2>
         
-        <div className="space-y-2">
-          {work.connectionsTo.map((conn: any) => (
-            <div
-              key={conn.id}
-              className="flex items-center justify-between p-3 bg-white rounded shadow border border-gray-200"
-            >
+        <div className="grid gap-3">
+          {work.connectionsTo.map((conn) => (
+            <Card key={conn.id} className="bg-white/95 p-4">
+              <div className="flex items-center justify-between gap-2">
               <div>
-                <span className="font-medium">{conn.fromWork.title}</span>
-                <span className="ml-2 text-sm text-gray-500">
+                <span className="font-medium text-slate-900">{conn.fromWork.title}</span>
+                <span className="ml-2 text-sm text-slate-500">
                   [{conn.relationType}]
                 </span>
               </div>
               <Link
                 href={`/works/${conn.fromWork.id}`}
-                className="px-3 py-1 text-sm bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition"
+                className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
               >
                 查看
               </Link>
-            </div>
+              </div>
+            </Card>
           ))}
           
           {work.connectionsTo.length === 0 && (
-            <p className="text-gray-500 text-center py-4">暂无联动</p>
+            <Card className="border-dashed border-slate-300 bg-white/80 py-10 text-center text-slate-500">暂无联动</Card>
           )}
         </div>
       </section>
