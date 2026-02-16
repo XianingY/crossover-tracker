@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
+import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
 
 interface Evidence {
   id: string
@@ -41,41 +42,48 @@ export default function EvidencesAdminPage() {
   }
   
   return (
-    <div className="min-h-screen p-4 max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-800 mb-4">证据审核</h1>
-      
-      <div className="flex gap-2 mb-4">
-        <button
+    <div className="mx-auto max-w-6xl px-4 py-8 md:px-8">
+      <header className="mb-6">
+        <p className="text-sm font-medium tracking-wide text-slate-500">ADMIN</p>
+        <h1 className="text-3xl font-semibold text-slate-900">证据审核</h1>
+        <p className="mt-1 text-sm text-slate-600">统一处理待审核证据，保证联动关系可追溯。</p>
+      </header>
+
+      <div className="mb-5 flex flex-wrap gap-2">
+        <Button
           onClick={() => setFilter('')}
-          className={`px-3 py-1 rounded ${!filter ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+          variant={!filter ? 'primary' : 'secondary'}
+          size="sm"
         >
           全部
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={() => setFilter('PENDING')}
-          className={`px-3 py-1 rounded ${filter === 'PENDING' ? 'bg-yellow-500 text-white' : 'bg-gray-200'}`}
+          variant={filter === 'PENDING' ? 'warning' : 'secondary'}
+          size="sm"
         >
           待审核
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={() => setFilter('APPROVED')}
-          className={`px-3 py-1 rounded ${filter === 'APPROVED' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}
+          variant={filter === 'APPROVED' ? 'success' : 'secondary'}
+          size="sm"
         >
           已通过
-        </button>
+        </Button>
       </div>
       
-      <div className="space-y-4">
+      <div className="grid gap-4">
         {evidences.map(evidence => (
-          <div key={evidence.id} className="p-4 bg-white rounded shadow border border-gray-200">
-            <div className="flex justify-between items-start mb-2">
+          <Card key={evidence.id} className="bg-white/95 p-5">
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
               <div>
-                <span className="font-medium">
+                <span className="font-medium text-slate-900">
                   {evidence.connection.fromWork.title} → {evidence.connection.toWork.title}
                 </span>
-                <span className={`ml-2 px-2 py-0.5 text-xs rounded ${
-                  evidence.status === 'PENDING' ? 'bg-yellow-100' :
-                  evidence.status === 'APPROVED' ? 'bg-green-100' : 'bg-red-100'
+                <span className={`ml-2 rounded-full px-2 py-0.5 text-xs font-medium ${
+                  evidence.status === 'PENDING' ? 'bg-amber-100 text-amber-700' :
+                  evidence.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
                 }`}>
                   {evidence.status}
                 </span>
@@ -83,24 +91,26 @@ export default function EvidencesAdminPage() {
               
               {evidence.status === 'PENDING' && (
                 <div className="flex gap-2">
-                  <button
+                  <Button
                     onClick={() => handleReview(evidence.id, 'APPROVED')}
-                    className="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600 transition"
+                    variant="success"
+                    size="sm"
                   >
                     通过
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={() => handleReview(evidence.id, 'REJECTED', '证据不充分')}
-                    className="px-3 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600 transition"
+                    variant="destructive"
+                    size="sm"
                   >
                     拒绝
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
             
             {evidence.description && (
-              <p className="text-sm text-gray-600 mb-2">{evidence.description}</p>
+              <p className="mb-2 text-sm text-slate-600">{evidence.description}</p>
             )}
             
             {evidence.type === 'link' && evidence.url && (
@@ -108,7 +118,7 @@ export default function EvidencesAdminPage() {
                 href={evidence.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm text-blue-500 hover:underline"
+                className="text-sm font-medium text-indigo-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 rounded"
               >
                 查看证据链接 →
               </a>
@@ -119,16 +129,19 @@ export default function EvidencesAdminPage() {
                 href={evidence.fileUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-sm text-blue-500 hover:underline"
+                className="text-sm font-medium text-indigo-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 rounded"
               >
                 查看证据文件 →
               </a>
             )}
-          </div>
+          </Card>
         ))}
         
         {evidences.length === 0 && (
-          <p className="text-center text-gray-500 py-8">暂无证据</p>
+          <Card className="border-dashed border-slate-300 bg-white/80 py-12 text-center">
+            <h3 className="text-lg font-semibold text-slate-800">暂无证据</h3>
+            <p className="mt-1 text-sm text-slate-600">当前筛选条件下没有可审核条目。</p>
+          </Card>
         )}
       </div>
     </div>
