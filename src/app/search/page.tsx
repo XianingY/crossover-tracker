@@ -494,7 +494,7 @@ export default function SearchPage() {
                 </h2>
                 <p className="mt-2 text-sm text-slate-600">{results.report.summary}</p>
                 <p className="mt-2 text-xs text-slate-500">
-                  联动判定标准：同一证据需同时提及源作品与目标 IP，并出现联动动作词（联动/合作/crossover 等）；每条 claim 至少满足 1 条官方来源或 2 个不同权威来源。
+                  联动判定标准：优先严格规则（源作品+目标 IP+联动词，且 1 官方或 2 权威）；若结果过少会自动启用扩展召回（1 官方或 1 权威），但仍过滤成人与低质站点。
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2 text-xs">
                   <span className="rounded bg-indigo-100 px-2 py-1 text-indigo-700">

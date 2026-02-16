@@ -58,13 +58,13 @@ describe('generateCrossoverReport', () => {
     expect(citationUrls.some(url => url.includes('4runner'))).toBe(false)
   })
 
-  it('drops claims that do not meet evidence threshold', async () => {
+  it('drops claims from untrusted sources even in balanced mode', async () => {
     const tavilyPayload = {
       results: [
         {
-          title: 'My Hero Academia x Sanrio collaboration',
-          url: 'https://en.wikipedia.org/wiki/My_Hero_Academia_x_Sanrio',
-          content: 'My Hero Academia x Sanrio collaboration merchandise campaign.',
+          title: 'My Hero Academia x Sanrio collaboration rumor',
+          url: 'https://example-blog.invalid/mha-sanrio-rumor',
+          content: 'My Hero Academia x Sanrio collaboration rumor summary.',
         },
       ],
     }
@@ -79,5 +79,35 @@ describe('generateCrossoverReport', () => {
 
     expect(report.stats.claims).toBe(0)
     expect(report.sections).toHaveLength(0)
+  })
+
+  it('filters aggregated link dumps and keeps clean official crossover evidence', async () => {
+    const tavilyPayload = {
+      results: [
+        {
+          title: '【堡垒之夜】联动道具展示！_哔哩哔哩_bilibili 会员购-bilibili正版衍生品&票务销售平台',
+          url: 'https://www.bilibili.com/video/BV1abc',
+          content: '已有62名堡垒之夜玩家推荐本视频，点击前往哔哩哔哩观看；更多精彩视频与合集持续更新。',
+        },
+        {
+          title: 'Fortnite x The Weeknd in Fortnite Festival',
+          url: 'https://www.fortnite.com/news/fortnite-festival-the-weeknd',
+          content: 'Official crossover event in Fortnite Festival featuring The Weeknd and themed items.',
+        },
+      ],
+    }
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => tavilyPayload,
+    })
+    global.fetch = fetchMock as unknown as typeof fetch
+
+    const report = await generateCrossoverReport('堡垒之夜')
+    const claims = report.sections.flatMap(section => section.claims)
+    const targets = claims.map(claim => claim.targetWork.toLowerCase())
+
+    expect(targets.some(target => target.includes('平台'))).toBe(false)
+    expect(targets.some(target => target.includes('weeknd'))).toBe(true)
   })
 })
