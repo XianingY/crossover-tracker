@@ -24,6 +24,13 @@ export interface WorkConnection {
   evidence: string
 }
 
+export interface WorkCandidate {
+  name: string
+  type: string
+  source: string
+  url: string
+}
+
 function getTavilyApiKey(): string | undefined {
   return process.env.TAVILY_API_KEY
 }
@@ -105,6 +112,75 @@ export async function searchEvidence(workA: string, workB: string): Promise<Sear
   const results = await searchWeb(query)
   
   return results.slice(0, 5)
+}
+
+export async function identifyWorks(query: string): Promise<WorkCandidate[]> {
+  const results = await searchWeb(query)
+  
+  const candidates: WorkCandidate[] = []
+  const seen = new Set<string>()
+  
+  for (const result of results) {
+    const workInfo = extractWorkInfo(result.title, result.snippet, result.url)
+    if (workInfo && !seen.has(workInfo.name)) {
+      seen.add(workInfo.name)
+      candidates.push(workInfo)
+    }
+  }
+  
+  return candidates.slice(0, 10)
+}
+
+function extractWorkInfo(title: string, snippet: string, url: string): WorkCandidate | null {
+  const text = title + ' ' + snippet
+  
+  let workName = ''
+  let workType = '未知'
+  
+  const titleMatch = text.match(/[《]([^》]+)[》]/)
+  if (titleMatch) {
+    workName = titleMatch[1]
+  }
+  
+  if (!workName) {
+    const cleanTitle = title.split(' - ')[0].split('|')[0].trim()
+    if (cleanTitle.length >= 2 && cleanTitle.length <= 30) {
+      workName = cleanTitle
+    }
+  }
+  
+  if (!workName) return null
+  
+  if (text.includes('漫画') || text.includes(' manga') || text.includes(' Comics')) {
+    workType = '漫画'
+  } else if (text.includes('动画') || text.includes(' anime') || text.includes(' Anime')) {
+    workType = '动画'
+  } else if (text.includes('小说') || text.includes(' novel') || text.includes(' Novel')) {
+    workType = '小说'
+  } else if (text.includes('电影') || text.includes(' movie') || text.includes(' Movie') || text.includes('Film')) {
+    workType = '电影'
+  } else if (text.includes('游戏') || text.includes(' game') || text.includes(' Game')) {
+    workType = '游戏'
+  } else if (text.includes('电视剧') || text.includes(' TV') || text.includes('剧集')) {
+    workType = '电视剧'
+  } else if (text.includes('轻小说')) {
+    workType = '轻小说'
+  }
+  
+  let source = '网络'
+  if (url.includes('baike.baidu.com')) source = '百度百科'
+  else if (url.includes('wikipedia.org')) source = '维基百科'
+  else if (url.includes('bilibili.com')) source = 'Bilibili'
+  else if (url.includes('douban.com')) source = '豆瓣'
+  else if (url.includes('weibo.com')) source = '微博'
+  else if (url.includes('youtube.com')) source = 'YouTube'
+  
+  return {
+    name: workName,
+    type: workType,
+    source,
+    url
+  }
 }
 
 function extractConnectionInfo(workName: string, result: SearchResult): WorkConnection | null {

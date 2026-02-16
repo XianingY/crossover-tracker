@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { searchWeb, searchConnections, searchEvidence } from '@/services/ai.service'
+import { searchWeb, searchConnections, searchEvidence, identifyWorks } from '@/services/ai.service'
 import { prisma } from '@/lib/prisma'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const query = searchParams.get('q')
-  const mode = searchParams.get('mode') || 'works'
+  const mode = searchParams.get('mode') || 'identify'
 
   if (!query) {
     return NextResponse.json({ error: 'Missing query parameter: q' }, { status: 400 })
@@ -13,9 +13,21 @@ export async function GET(request: NextRequest) {
 
   try {
     switch (mode) {
-      case 'works': {
-        const results = await searchWeb(query)
-        return NextResponse.json({ type: 'works', query, results })
+      case 'identify': {
+        const workCandidates = await identifyWorks(query)
+        
+        const foundInDb = await prisma.work.findMany({
+          where: {
+            title: { contains: query, mode: 'insensitive' }
+          }
+        })
+
+        return NextResponse.json({
+          type: 'identify',
+          query,
+          workCandidates,
+          foundInDb
+        })
       }
 
       case 'connections': {
@@ -31,27 +43,6 @@ export async function GET(request: NextRequest) {
         }
         const evidence = await searchEvidence(workA, workB)
         return NextResponse.json({ type: 'evidence', workA, workB, evidence })
-      }
-
-      case 'auto': {
-        const [searchResults, connections] = await Promise.all([
-          searchWeb(query),
-          searchConnections(query)
-        ])
-
-        const foundInDb = await prisma.work.findMany({
-          where: {
-            title: { contains: query, mode: 'insensitive' }
-          }
-        })
-
-        return NextResponse.json({
-          type: 'auto',
-          query,
-          searchResults,
-          connections,
-          foundInDb
-        })
       }
 
       default:
