@@ -63,7 +63,7 @@ model Connection {
   // 层级（自动计算）
   level       Int       @default(1) // 1 = 一级子节点
   
-  // 证据（必须至少有一个通过才能显示联动）
+  // 证据（图谱可显示未审核联动为虚线；层级计算以至少一个 APPROVED 证据为准）
   evidences   Evidence[]
   
   // 唯一约束：同一对作品同一关系类型只能有一条

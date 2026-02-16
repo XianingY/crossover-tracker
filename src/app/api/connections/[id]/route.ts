@@ -4,7 +4,7 @@ import { GraphService } from '@/services/graph.service'
 
 // 获取联动详情
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
@@ -31,29 +31,30 @@ export async function GET(
 
 // 删除联动
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
   
   try {
-    // 先删除关联的证据
-    await prisma.evidence.deleteMany({
-      where: { connectionId: id }
-    })
-    
-    // 删除联动
-    await prisma.connection.delete({
-      where: { id }
+    await prisma.$transaction(async (tx) => {
+      await tx.evidence.deleteMany({
+        where: { connectionId: id }
+      })
+
+      await tx.connection.delete({
+        where: { id }
+      })
     })
     
     // 重新计算层级
     await GraphService.recalculateLevels()
     
     return NextResponse.json({ success: true })
-  } catch (error: any) {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to delete connection'
     return NextResponse.json(
-      { error: error.message || 'Failed to delete connection' },
+      { error: message },
       { status: 400 }
     )
   }

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { GraphService } from '@/services/graph.service'
 
 // 获取作品详情
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
@@ -59,9 +60,10 @@ export async function PUT(
     })
     
     return NextResponse.json(work)
-  } catch (error: any) {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to update work'
     return NextResponse.json(
-      { error: error.message || 'Failed to update work' },
+      { error: message },
       { status: 400 }
     )
   }
@@ -69,55 +71,59 @@ export async function PUT(
 
 // 删除作品
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
   
   try {
-    // 先删除关联的证据和联动
-    // 找到所有关联的 connection
-    const connections = await prisma.connection.findMany({
-      where: {
-        OR: [
-          { fromWorkId: id },
-          { toWorkId: id }
-        ]
-      },
-      select: { id: true }
+    await prisma.$transaction(async (tx) => {
+      // 找到所有关联 connection
+      const connections = await tx.connection.findMany({
+        where: {
+          OR: [
+            { fromWorkId: id },
+            { toWorkId: id }
+          ]
+        },
+        select: { id: true }
+      })
+
+      const connectionIds = connections.map(c => c.id)
+
+      // 删除证据
+      await tx.evidence.deleteMany({
+        where: {
+          OR: [
+            { connectionId: { in: connectionIds } },
+            { workId: id }
+          ]
+        }
+      })
+
+      // 删除联动
+      await tx.connection.deleteMany({
+        where: {
+          OR: [
+            { fromWorkId: id },
+            { toWorkId: id }
+          ]
+        }
+      })
+
+      // 删除作品
+      await tx.work.delete({
+        where: { id }
+      })
     })
-    
-    const connectionIds = connections.map(c => c.id)
-    
-    // 删除证据
-    await prisma.evidence.deleteMany({
-      where: {
-        OR: [
-          { connectionId: { in: connectionIds } },
-          { workId: id }
-        ]
-      }
-    })
-    
-    // 删除联动
-    await prisma.connection.deleteMany({
-      where: {
-        OR: [
-          { fromWorkId: id },
-          { toWorkId: id }
-        ]
-      }
-    })
-    
-    // 删除作品
-    await prisma.work.delete({
-      where: { id }
-    })
+
+    await GraphService.recalculateLevels()
     
     return NextResponse.json({ success: true })
-  } catch (error: any) {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to delete work'
     return NextResponse.json(
-      { error: error.message || 'Failed to delete work' },
+      { error: message },
       { status: 400 }
     )
   }
