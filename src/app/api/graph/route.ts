@@ -1,15 +1,31 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
+export interface GraphNode {
+  id: string
+  title: string
+  type: string
+  isCentral: boolean
+  coverUrl?: string | null
+  level: number
+}
+
+export interface GraphLink {
+  source: string
+  target: string
+  relationType: string
+  level: number
+}
+
 export async function GET() {
   const centralWork = await prisma.work.findFirst({
     where: { isCentral: true }
   })
-  
+
   if (!centralWork) {
     return NextResponse.json({ nodes: [], links: [] })
   }
-  
+
   // 获取所有与中心作品直接或间接关联的作品（有通过证据的联动）
   const connections = await prisma.connection.findMany({
     where: {
@@ -23,10 +39,10 @@ export async function GET() {
       toWork: true
     }
   })
-  
+
   // 构建节点列表
   const nodeIds = new Set<string>([centralWork.id])
-  const nodes: any[] = [{
+  const nodes: GraphNode[] = [{
     id: centralWork.id,
     title: centralWork.title,
     type: centralWork.type,
@@ -34,12 +50,12 @@ export async function GET() {
     coverUrl: centralWork.coverUrl,
     level: 0
   }]
-  
-  const links: any[] = []
-  
+
+  const links: GraphLink[] = []
+
   for (const conn of connections) {
     nodeIds.add(conn.toWorkId)
-    
+
     // 添加目标节点
     nodes.push({
       id: conn.toWork.id,
@@ -49,7 +65,7 @@ export async function GET() {
       coverUrl: conn.toWork.coverUrl,
       level: conn.level
     })
-    
+
     links.push({
       source: conn.fromWorkId,
       target: conn.toWorkId,
@@ -57,6 +73,6 @@ export async function GET() {
       level: conn.level
     })
   }
-  
+
   return NextResponse.json({ nodes, links })
 }
