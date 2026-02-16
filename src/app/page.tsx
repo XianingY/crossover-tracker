@@ -3,15 +3,27 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import { useRouter } from 'next/navigation'
+import { Card } from '@/components/ui/Card'
+import type { GraphNode } from '@/components/GraphView'
 
 const GraphView = dynamic(() => import('@/components/GraphView').then((m) => m.GraphView), {
   ssr: false,
 })
 
 export default function HomePage() {
-  const router = useRouter()
   const [centralWorkId, setCentralWorkId] = useState<string>('')
+  const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
+  const [selectedNodeDetail, setSelectedNodeDetail] = useState<{
+    id: string
+    title: string
+    type: string
+    description: string | null
+    isCentral: boolean
+    coverUrl: string | null
+    connectionsFrom: { id: string }[]
+    connectionsTo: { id: string }[]
+  } | null>(null)
+  const [panelLoading, setPanelLoading] = useState(false)
   
   useEffect(() => {
     // 获取中心作品
@@ -28,70 +40,173 @@ export default function HomePage() {
       })
   }, [])
   
-  const handleNodeClick = (workId: string) => {
-    router.push(`/works/${workId}`)
+  useEffect(() => {
+    if (!selectedNode) return
+
+    let cancelled = false
+
+    fetch(`/api/works/${selectedNode.id}`)
+      .then((res) => {
+        if (!res.ok) throw new Error('fetch failed')
+        return res.json()
+      })
+      .then((data) => {
+        if (!cancelled) setSelectedNodeDetail(data)
+      })
+      .catch(() => {
+        if (!cancelled) setSelectedNodeDetail(null)
+      })
+      .finally(() => {
+        if (!cancelled) setPanelLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedNode])
+
+  useEffect(() => {
+    if (!selectedNode) return
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSelectedNode(null)
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [selectedNode])
+
+  const handleNodeSelect = (node: GraphNode) => {
+    setSelectedNode(node)
+    setSelectedNodeDetail(null)
+    setPanelLoading(true)
   }
-  
+
   return (
-    <main className="min-h-screen p-4 bg-white">
-      <header className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">文艺作品联动图谱</h1>
-        <div className="space-x-2">
-          <Link
-            href="/works/new"
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
-          >
+    <main className="mx-auto max-w-7xl px-4 py-8 md:px-8">
+      <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p className="text-sm font-medium tracking-wide text-slate-500">CROSSOVER TRACKER</p>
+          <h1 className="mt-1 text-3xl font-semibold text-slate-900 md:text-4xl">文艺作品联动图谱</h1>
+          <p className="mt-2 max-w-2xl text-sm text-slate-600">
+            以中心作品为起点，查看跨小说、漫画、动画、游戏等媒介的关联路径。
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/works/new" className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
             添加作品
           </Link>
-          <Link
-            href="/works"
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition"
-          >
+          <Link href="/works" className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
             作品列表
           </Link>
         </div>
       </header>
-      
+
       {!centralWorkId ? (
-        <div className="flex flex-col items-center justify-center h-96">
-          <p className="text-gray-500 mb-4">尚未设置中心作品</p>
-          <Link
-            href="/works/new?central=true"
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-          >
-            创建中心作品
-          </Link>
-        </div>
+        <Card className="border-dashed border-slate-300 bg-white/80 text-center">
+          <div className="py-20">
+            <h2 className="text-2xl font-semibold text-slate-800">还没有中心作品</h2>
+            <p className="mx-auto mt-2 max-w-md text-slate-600">
+              先创建一个中心作品，系统将基于它自动计算联动层级并生成关系图。
+            </p>
+            <div className="mt-6">
+              <Link href="/works/new?central=true" className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-6 py-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                创建中心作品
+              </Link>
+            </div>
+          </div>
+        </Card>
       ) : (
-        <GraphView
-          centralWorkId={centralWorkId}
-          onNodeClick={handleNodeClick}
-        />
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-900">联动网络</h2>
+          <p className="text-xs text-slate-500">点击节点可在右侧查看详情，按 Esc 可关闭侧栏</p>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px]">
+            <GraphView
+              centralWorkId={centralWorkId}
+              onNodeSelect={handleNodeSelect}
+              selectedNodeId={selectedNode?.id}
+            />
+            <Card className="h-fit bg-white/90 p-4 lg:sticky lg:top-6">
+              {!selectedNode ? (
+                <div className="space-y-2 py-6 text-center">
+                  <h3 className="text-base font-semibold text-slate-800">节点详情</h3>
+                  <p className="text-sm text-slate-600">从图谱中选择任一节点，这里会展示作品信息与联动统计。</p>
+                </div>
+              ) : (
+                <div className="space-y-4" aria-live="polite">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h3 className="text-lg font-semibold text-slate-900">{selectedNode.title}</h3>
+                      <p className="text-xs text-slate-500">层级: {selectedNode.level} · 类型: {selectedNode.type}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedNode(null)}
+                      className="rounded-md p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                      aria-label="关闭节点详情侧栏"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                    {selectedNodeDetail?.coverUrl || selectedNode.coverUrl ? (
+                      <div
+                        className="h-44 w-full bg-cover bg-center"
+                        style={{ backgroundImage: `url(${selectedNodeDetail?.coverUrl || selectedNode.coverUrl})` }}
+                        role="img"
+                        aria-label={`${selectedNode.title} 封面`}
+                      />
+                    ) : (
+                      <div className="flex h-44 items-center justify-center text-xs text-slate-500">无封面</div>
+                    )}
+                  </div>
+
+                  {panelLoading ? (
+                    <p className="text-sm text-slate-500">加载节点详情中...</p>
+                  ) : (
+                    <>
+                      <p className="text-sm leading-relaxed text-slate-600">
+                        {selectedNodeDetail?.description || '暂无作品简介。'}
+                      </p>
+                      <div className="grid grid-cols-2 gap-2 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
+                        <div>
+                          <p className="text-slate-500">出向联动</p>
+                          <p className="text-base font-semibold text-slate-800">{selectedNodeDetail?.connectionsFrom.length ?? '-'}</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-500">入向联动</p>
+                          <p className="text-base font-semibold text-slate-800">{selectedNodeDetail?.connectionsTo.length ?? '-'}</p>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  <Link
+                    href={`/works/${selectedNode.id}`}
+                    className="inline-flex w-full items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                  >
+                    打开完整详情页
+                  </Link>
+                </div>
+              )}
+            </Card>
+          </div>
+          <Card className="bg-white/70 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-3 text-sm text-slate-700">
+              <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: 'var(--level-0)' }}></span>中心</span>
+              <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: 'var(--level-1)' }}></span>一级</span>
+              <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: 'var(--level-2)' }}></span>二级</span>
+              <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: 'var(--level-3)' }}></span>三级</span>
+              <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: 'var(--level-4)' }}></span>四级及以上</span>
+            </div>
+          </Card>
+        </section>
       )}
-      
-      {/* 图例 */}
-      <div className="mt-4 flex items-center justify-center gap-4 text-sm">
-        <span className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded-full bg-red-500"></span>
-          中心作品
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded-full bg-orange-500"></span>
-          一级联动
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded-full bg-yellow-500"></span>
-          二级联动
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded-full bg-green-500"></span>
-          三级联动
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-3 h-3 rounded-full bg-blue-500"></span>
-          四级联动
-        </span>
-      </div>
     </main>
   )
 }
