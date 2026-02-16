@@ -91,8 +91,13 @@ npm run vercel-build
 该命令会执行：
 
 1. `prisma generate`
-2. `prisma migrate deploy`
-3. `next build`
+2. `next build`
+
+说明：生产迁移不再在 Vercel build 自动执行，请在发布前手动执行：
+
+```bash
+npm run db:migrate:deploy
+```
 
 ## Observability + Alerts
 

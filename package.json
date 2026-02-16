@@ -12,7 +12,7 @@
     "db:generate": "prisma generate",
     "db:migrate:dev": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
-    "vercel-build": "prisma generate && npm run db:migrate:deploy && next build"
+    "vercel-build": "prisma generate && next build"
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",
