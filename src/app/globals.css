@@ -44,26 +44,8 @@
   --font-mono: ui-monospace, SFMono-Regular, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0f1521;
-    --foreground: #f1f5f9;
 
-    --primary: #6b7ad6;
-    --primary-foreground: #ffffff;
 
-    --accent: #4abab5;
-    --accent-foreground: #0a1520;
-
-    --muted: #1e293b;
-    --muted-foreground: #94a3b8;
-
-    --card: #162032;
-    --card-foreground: #f1f5f9;
-
-    --border: #2d3d55;
-  }
-}
 
 body {
   background: var(--background);

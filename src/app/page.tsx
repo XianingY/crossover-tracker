@@ -93,7 +93,7 @@ export default function HomePage() {
   }
 
   return (
-    <main className="w-full max-w-[1920px] px-4 py-8 md:px-8">
+    <main className="mx-auto max-w-7xl px-4 py-8 md:px-8">
       <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-sm font-medium tracking-wide text-slate-500">CROSSOVER TRACKER</p>
