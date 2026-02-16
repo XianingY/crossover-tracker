@@ -8,6 +8,7 @@ export interface SearchResult {
   title: string
   url: string
   snippet: string
+  imageUrl?: string
 }
 
 export interface ImageAnalysisResult {
@@ -22,6 +23,9 @@ export interface WorkConnection {
   toWork: string
   relationType: string
   evidence: string
+  evidenceUrl: string
+  fromImage?: string
+  toImage?: string
 }
 
 export interface WorkCandidate {
@@ -29,6 +33,7 @@ export interface WorkCandidate {
   type: string
   source: string
   url: string
+  imageUrl?: string
 }
 
 function getTavilyApiKey(): string | undefined {
@@ -54,7 +59,7 @@ export async function searchWeb(query: string): Promise<SearchResult[]> {
         max_results: 10,
         include_answer: false,
         include_raw_content: false,
-        include_images: false
+        include_images: true
       })
     })
 
@@ -68,7 +73,8 @@ export async function searchWeb(query: string): Promise<SearchResult[]> {
       return data.results.map((item: any) => ({
         title: item.title || '',
         url: item.url || '',
-        snippet: item.content || item.snippet || ''
+        snippet: item.content || item.snippet || '',
+        imageUrl: item.images?.[0] || undefined
       }))
     }
 
@@ -121,7 +127,7 @@ export async function identifyWorks(query: string): Promise<WorkCandidate[]> {
   const seen = new Set<string>()
   
   for (const result of results) {
-    const workInfo = extractWorkInfo(result.title, result.snippet, result.url)
+    const workInfo = extractWorkInfo(result.title, result.snippet, result.url, result.imageUrl)
     if (workInfo && !seen.has(workInfo.name)) {
       seen.add(workInfo.name)
       candidates.push(workInfo)
@@ -131,7 +137,7 @@ export async function identifyWorks(query: string): Promise<WorkCandidate[]> {
   return candidates.slice(0, 10)
 }
 
-function extractWorkInfo(title: string, snippet: string, url: string): WorkCandidate | null {
+function extractWorkInfo(title: string, snippet: string, url: string, imageUrl?: string): WorkCandidate | null {
   const text = title + ' ' + snippet
   
   let workName = ''
@@ -179,7 +185,8 @@ function extractWorkInfo(title: string, snippet: string, url: string): WorkCandi
     name: workName,
     type: workType,
     source,
-    url
+    url,
+    imageUrl
   }
 }
 
@@ -206,7 +213,9 @@ function extractConnectionInfo(workName: string, result: SearchResult): WorkConn
     fromWork: workName,
     toWork: targetWork,
     relationType,
-    evidence: result.url
+    evidence: result.snippet || result.url,
+    evidenceUrl: result.url,
+    fromImage: result.imageUrl
   }
 }
 
