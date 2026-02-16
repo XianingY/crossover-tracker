@@ -1,6 +1,7 @@
 import { Prisma, WorkType } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import { buildAliasRecords } from '@/lib/work-alias'
 import { prisma } from '@/lib/prisma'
 import { attachPaginationHeaders, parsePaginationParams } from '@/lib/pagination'
 
@@ -26,6 +27,10 @@ const createWorkSchema = z.object({
   description: optionalTextSchema,
   coverUrl: optionalUrlSchema,
   isCentral: z.boolean().optional().default(false),
+  aliases: z
+    .array(z.string().trim().min(1).max(120))
+    .max(20)
+    .optional(),
 })
 
 // 作品列表 API
@@ -70,22 +75,52 @@ export async function GET(request: NextRequest) {
   }
 
   if (search.length > 0) {
-    where.title = {
-      contains: search,
-      mode: 'insensitive',
-    }
+    where.OR = [
+      {
+        title: {
+          contains: search,
+          mode: 'insensitive',
+        },
+      },
+      {
+        aliases: {
+          some: {
+            alias: {
+              contains: search,
+              mode: 'insensitive',
+            },
+          },
+        },
+      },
+    ]
+  }
+
+  const include: Prisma.WorkInclude = {
+    aliases: {
+      orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+      take: 10,
+      select: {
+        id: true,
+        alias: true,
+        normalizedAlias: true,
+        isPrimary: true,
+      },
+    },
+    _count: {
+      select: {
+        connectionsFrom: true,
+        connectionsTo: true,
+      },
+    },
+  }
+
+  if (search.length === 0) {
+    include.aliases = false
   }
 
   const queryOptions: Prisma.WorkFindManyArgs = {
     where,
-    include: {
-      _count: {
-        select: {
-          connectionsFrom: true,
-          connectionsTo: true,
-        },
-      },
-    },
+    include,
     orderBy: { createdAt: 'desc' },
   }
 
@@ -115,15 +150,46 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: message || 'Invalid request body' }, { status: 400 })
     }
 
-    const { title, type, description, coverUrl, isCentral } = parsed.data
-    const work = await prisma.work.create({
-      data: {
-        title,
-        type,
-        description,
-        coverUrl,
-        isCentral,
-      },
+    const { title, type, description, coverUrl, isCentral, aliases } = parsed.data
+    const aliasRecords = buildAliasRecords(title, aliases)
+
+    const work = await prisma.$transaction(async tx => {
+      const created = await tx.work.create({
+        data: {
+          title,
+          type,
+          description,
+          coverUrl,
+          isCentral,
+        },
+      })
+
+      if (aliasRecords.length > 0) {
+        await tx.workAlias.createMany({
+          data: aliasRecords.map(record => ({
+            workId: created.id,
+            alias: record.alias,
+            normalizedAlias: record.normalizedAlias,
+            isPrimary: record.isPrimary,
+          })),
+          skipDuplicates: true,
+        })
+      }
+
+      return tx.work.findUniqueOrThrow({
+        where: { id: created.id },
+        include: {
+          aliases: {
+            orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+            select: {
+              id: true,
+              alias: true,
+              normalizedAlias: true,
+              isPrimary: true,
+            },
+          },
+        },
+      })
     })
 
     return NextResponse.json(work, { status: 201 })

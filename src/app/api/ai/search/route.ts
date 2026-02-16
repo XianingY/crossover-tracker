@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { consumeRateLimit } from '@/lib/rate-limit'
 import { getOrSetCachedValue } from '@/lib/request-cache'
 import { captureApiException } from '@/lib/observability'
+import { normalizeAlias } from '@/lib/work-alias'
 
 const modeSchema = z.enum(['identify', 'connections', 'evidence'])
 
@@ -25,7 +26,13 @@ interface IdentifyResponse {
   type: 'identify'
   query: string
   workCandidates: Awaited<ReturnType<typeof identifyWorks>>
-  foundInDb: Awaited<ReturnType<typeof prisma.work.findMany>>
+  foundInDb: Array<{
+    id: string
+    title: string
+    type: string
+    coverUrl: string | null
+    aliases: Array<{ alias: string; isPrimary: boolean }>
+  }>
 }
 
 interface ConnectionsResponse {
@@ -55,6 +62,24 @@ function getCacheTtlMs(mode: z.infer<typeof modeSchema>): number {
   if (mode === 'identify') return 60 * 1000
   if (mode === 'connections') return 90 * 1000
   return 120 * 1000
+}
+
+function mergeIdentifyCandidates(
+  localCandidates: Awaited<ReturnType<typeof identifyWorks>>,
+  aiCandidates: Awaited<ReturnType<typeof identifyWorks>>
+): Awaited<ReturnType<typeof identifyWorks>> {
+  const merged: Awaited<ReturnType<typeof identifyWorks>> = []
+  const seen = new Set<string>()
+
+  for (const candidate of [...localCandidates, ...aiCandidates]) {
+    const key = normalizeAlias(candidate.name)
+    if (!key || seen.has(key)) continue
+
+    seen.add(key)
+    merged.push(candidate)
+  }
+
+  return merged.slice(0, 12)
 }
 
 export async function GET(request: NextRequest) {
@@ -97,7 +122,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Query is too long (max 120 characters)' }, { status: 400 })
   }
 
-  const cacheKey = `ai-search:v2:${mode}:${query.toLowerCase()}:${workA.toLowerCase()}:${workB.toLowerCase()}`
+  const cacheKey = `ai-search:v3:${mode}:${query.toLowerCase()}:${workA.toLowerCase()}:${workB.toLowerCase()}`
   const cacheTtlMs = getCacheTtlMs(mode)
 
   try {
@@ -107,12 +132,41 @@ export async function GET(request: NextRequest) {
       async () => {
         switch (mode) {
           case 'identify': {
-            const workCandidates = await identifyWorks(query)
             const foundInDb = await prisma.work.findMany({
               where: {
-                title: { contains: query, mode: 'insensitive' },
+                OR: [
+                  { title: { contains: query, mode: 'insensitive' } },
+                  {
+                    aliases: {
+                      some: {
+                        alias: { contains: query, mode: 'insensitive' },
+                      },
+                    },
+                  },
+                ],
               },
+              include: {
+                aliases: {
+                  select: {
+                    alias: true,
+                    isPrimary: true,
+                  },
+                  orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+                  take: 10,
+                },
+              },
+              orderBy: { updatedAt: 'desc' },
+              take: 20,
             })
+            const localCandidates = foundInDb.map(work => ({
+              name: work.title,
+              type: work.type,
+              source: '数据库',
+              url: `/works/${work.id}`,
+              imageUrl: work.coverUrl || undefined,
+            }))
+            const aiCandidates = await identifyWorks(query)
+            const workCandidates = mergeIdentifyCandidates(localCandidates, aiCandidates)
 
             return {
               type: 'identify',
@@ -125,7 +179,18 @@ export async function GET(request: NextRequest) {
           case 'connections': {
             const dbConnections: ApiConnection[] = []
             const dbWorks = await prisma.work.findMany({
-              where: { title: { contains: query, mode: 'insensitive' } },
+              where: {
+                OR: [
+                  { title: { contains: query, mode: 'insensitive' } },
+                  {
+                    aliases: {
+                      some: {
+                        alias: { contains: query, mode: 'insensitive' },
+                      },
+                    },
+                  },
+                ],
+              },
               include: {
                 connectionsFrom: {
                   include: { toWork: true },

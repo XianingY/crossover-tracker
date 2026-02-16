@@ -3,6 +3,7 @@
  * 
  * 使用 Tavily Search API
  */
+import { z } from 'zod'
 
 export interface SearchResult {
   title: string
@@ -28,6 +29,7 @@ export interface WorkConnection {
   relationType: string
   evidence: string
   evidenceUrl: string
+  confidence?: number
   fromImage?: string
   toImage?: string
   sourceName?: string
@@ -50,6 +52,7 @@ interface SearchWebOptions {
   preferOfficial?: boolean
   officialOrTrustedOnly?: boolean
   maxResults?: number
+  includeDomains?: string[]
 }
 
 interface TavilySearchItem {
@@ -69,6 +72,23 @@ interface RankedSearchResult extends SearchResult {
   sourceName: string
   sourceLevel: SourceLevel
 }
+
+const relationTypeSchema = z.enum([
+  'adaptation',
+  'spin_off',
+  'crossover',
+  'reference',
+  'inspired',
+])
+
+const structuredConnectionSchema = z.object({
+  fromWork: z.string().min(1),
+  toWork: z.string().min(1),
+  relationType: relationTypeSchema,
+  evidence: z.string().min(1),
+  evidenceUrl: z.string().url(),
+  confidence: z.number().min(0).max(1),
+})
 
 const BLOCKED_DOMAIN_FRAGMENTS = [
   // Adult / NSFW
@@ -140,6 +160,25 @@ const OFFICIAL_PLATFORM_DOMAINS = [
   'instagram.com',
   'facebook.com',
   'tiktok.com'
+]
+
+const OFFICIAL_DOMAIN_WHITELIST = [
+  ...OFFICIAL_PLATFORM_DOMAINS,
+  'shonenjump.com',
+  'kodansha.co.jp',
+  'aniplex.co.jp',
+  'toei-anim.co.jp',
+  'kadokawa.co.jp',
+]
+
+const TRUSTED_DOMAIN_WHITELIST = [
+  'wikipedia.org',
+  'baike.baidu.com',
+  'bangumi.tv',
+  'myanimelist.net',
+  'anilist.co',
+  'anidb.net',
+  'douban.com',
 ]
 
 const TAVILY_EXCLUDE_DOMAINS = [
@@ -337,8 +376,47 @@ function mergeSearchResults(primary: SearchResult[], secondary: SearchResult[]):
 }
 
 export async function searchWeb(query: string, options: SearchWebOptions = {}): Promise<SearchResult[]> {
-  const apiKey = getTavilyApiKey()
+  const preferOfficial = options.preferOfficial ?? false
+  const officialOrTrustedOnly = options.officialOrTrustedOnly ?? false
+  const maxResults = options.maxResults ?? 20
 
+  if (options.includeDomains && options.includeDomains.length > 0) {
+    return queryTavily(query, options)
+  }
+
+  if (!preferOfficial) {
+    return queryTavily(query, options)
+  }
+
+  const officialResults = await queryTavily(query, {
+    ...options,
+    includeDomains: OFFICIAL_DOMAIN_WHITELIST,
+  })
+
+  if (officialResults.length >= maxResults) {
+    return officialResults.slice(0, maxResults)
+  }
+
+  const trustedResults = await queryTavily(query, {
+    ...options,
+    includeDomains: [...OFFICIAL_DOMAIN_WHITELIST, ...TRUSTED_DOMAIN_WHITELIST],
+  })
+
+  const mergedTrusted = mergeSearchResults(officialResults, trustedResults)
+  if (officialOrTrustedOnly || mergedTrusted.length >= maxResults) {
+    return mergedTrusted.slice(0, maxResults)
+  }
+
+  const fallbackResults = await queryTavily(query, {
+    ...options,
+    includeDomains: undefined,
+  })
+
+  return mergeSearchResults(mergedTrusted, fallbackResults).slice(0, maxResults)
+}
+
+async function queryTavily(query: string, options: SearchWebOptions = {}): Promise<SearchResult[]> {
+  const apiKey = getTavilyApiKey()
   if (!apiKey) {
     throw new Error('搜索服务未配置。请在 Vercel 后台配置 TAVILY_API_KEY')
   }
@@ -346,6 +424,7 @@ export async function searchWeb(query: string, options: SearchWebOptions = {}): 
   const preferOfficial = options.preferOfficial ?? false
   const officialOrTrustedOnly = options.officialOrTrustedOnly ?? false
   const maxResults = options.maxResults ?? 20
+  const includeDomains = options.includeDomains
 
   const refinedQuery = preferOfficial
     ? `${query} 官方 官网 官方公告 官宣 公式サイト official announcement press release`
@@ -355,7 +434,7 @@ export async function searchWeb(query: string, options: SearchWebOptions = {}): 
     const response = await fetch('https://api.tavily.com/search', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         api_key: apiKey,
@@ -364,66 +443,65 @@ export async function searchWeb(query: string, options: SearchWebOptions = {}): 
         include_answer: false,
         include_raw_content: false,
         include_images: true,
-        exclude_domains: TAVILY_EXCLUDE_DOMAINS
-      })
+        exclude_domains: TAVILY_EXCLUDE_DOMAINS,
+        ...(includeDomains && includeDomains.length > 0
+          ? { include_domains: Array.from(new Set(includeDomains)) }
+          : {}),
+      }),
     })
 
     if (!response.ok) {
       throw new Error(`Tavily API error: ${response.status}`)
     }
 
-    const data = await response.json() as TavilySearchResponse
-
-    if (data.results && Array.isArray(data.results)) {
-      const rankedResults = data.results
-        .map((item): RankedSearchResult | null => {
-          const url = (item.url || '').trim()
-          const title = (item.title || '').trim()
-          const snippet = (item.content || item.snippet || '').trim()
-
-          if (!url) {
-            return null
-          }
-
-          if (isBlocked(url) || isContentBlocked(title, snippet) || isLowQualityContent(title, snippet)) {
-            return null
-          }
-
-          const sourceLevel = classifySourceLevel(url, title, snippet)
-          if (officialOrTrustedOnly && sourceLevel === 'other') {
-            return null
-          }
-
-          const sourceName = getSourceName(url)
-
-          return {
-            title,
-            url,
-            snippet,
-            imageUrl: item.images?.[0] || undefined,
-            sourceName,
-            sourceLevel,
-            priority: scoreSearchResult(url, sourceLevel, preferOfficial)
-          }
-        })
-        .filter((item): item is RankedSearchResult => item !== null)
-
-      const results = dedupeResults(rankedResults)
-        .sort((a, b) => b.priority - a.priority)
-        .slice(0, maxResults)
-        .map(result => ({
-          title: result.title,
-          url: result.url,
-          snippet: result.snippet,
-          imageUrl: result.imageUrl,
-          sourceName: result.sourceName,
-          sourceLevel: result.sourceLevel
-        }))
-
-      return results
+    const data = (await response.json()) as TavilySearchResponse
+    if (!Array.isArray(data.results)) {
+      return []
     }
 
-    return []
+    const rankedResults = data.results
+      .map((item): RankedSearchResult | null => {
+        const url = (item.url || '').trim()
+        const title = (item.title || '').trim()
+        const snippet = (item.content || item.snippet || '').trim()
+
+        if (!url) {
+          return null
+        }
+
+        if (isBlocked(url) || isContentBlocked(title, snippet) || isLowQualityContent(title, snippet)) {
+          return null
+        }
+
+        const sourceLevel = classifySourceLevel(url, title, snippet)
+        if (officialOrTrustedOnly && sourceLevel === 'other') {
+          return null
+        }
+
+        const sourceName = getSourceName(url)
+        return {
+          title,
+          url,
+          snippet,
+          imageUrl: item.images?.[0] || undefined,
+          sourceName,
+          sourceLevel,
+          priority: scoreSearchResult(url, sourceLevel, preferOfficial),
+        }
+      })
+      .filter((item): item is RankedSearchResult => item !== null)
+
+    return dedupeResults(rankedResults)
+      .sort((a, b) => b.priority - a.priority)
+      .slice(0, maxResults)
+      .map(result => ({
+        title: result.title,
+        url: result.url,
+        snippet: result.snippet,
+        imageUrl: result.imageUrl,
+        sourceName: result.sourceName,
+        sourceLevel: result.sourceLevel,
+      }))
   } catch (error) {
     console.error('Tavily search error:', error)
     throw new Error('搜索失败，请稍后重试')
@@ -625,46 +703,113 @@ function extractWorkInfo(
 }
 
 function extractConnectionInfo(workName: string, result: SearchResult): WorkConnection | null {
-  const text = result.title + ' ' + result.snippet
+  const text = `${result.title} ${result.snippet}`
+  const lowerText = text.toLowerCase()
 
-  let relationType = 'crossover'
-  if (text.includes('改编') || text.includes('adaptation')) {
+  let relationType: z.infer<typeof relationTypeSchema> = 'crossover'
+  if (lowerText.includes('改编') || lowerText.includes('adaptation')) {
     relationType = 'adaptation'
-  } else if (text.includes('衍生') || text.includes('spin-off') || text.includes('续作')) {
+  } else if (lowerText.includes('衍生') || lowerText.includes('spin-off') || lowerText.includes('续作')) {
     relationType = 'spin_off'
-  } else if (text.includes('客串') || text.includes('crossover')) {
-    relationType = 'crossover'
-  } else if (text.includes('参考') || text.includes('reference')) {
+  } else if (lowerText.includes('参考') || lowerText.includes('reference')) {
     relationType = 'reference'
-  } else if (text.includes('灵感') || text.includes('inspired')) {
+  } else if (lowerText.includes('灵感') || lowerText.includes('inspired')) {
     relationType = 'inspired'
   }
 
   const targetWork = extractTargetWork(text, workName)
-  if (!targetWork) return null
+  if (!targetWork || normalizeForMatch(targetWork) === normalizeForMatch(workName)) {
+    return null
+  }
 
-  return {
+  const confidence = scoreConnectionConfidence(text, result.sourceLevel || 'other', relationType)
+  if (confidence < 0.35) {
+    return null
+  }
+
+  const parsed = structuredConnectionSchema.safeParse({
     fromWork: workName,
     toWork: targetWork,
     relationType,
-    evidence: result.snippet || result.url,
+    evidence: (result.snippet || result.title || result.url).slice(0, 500),
     evidenceUrl: result.url,
+    confidence,
+  })
+
+  if (!parsed.success) {
+    return null
+  }
+
+  return {
+    ...parsed.data,
     fromImage: result.imageUrl,
     sourceName: result.sourceName,
-    sourceLevel: result.sourceLevel
+    sourceLevel: result.sourceLevel,
   }
 }
 
+function scoreConnectionConfidence(
+  text: string,
+  sourceLevel: SourceLevel,
+  relationType: z.infer<typeof relationTypeSchema>
+): number {
+  let score = 0.35
+  const lowerText = text.toLowerCase()
+
+  if (sourceLevel === 'official') {
+    score += 0.35
+  } else if (sourceLevel === 'trusted') {
+    score += 0.2
+  }
+
+  if (/《[^》]+》/.test(text)) {
+    score += 0.15
+  }
+
+  if (
+    lowerText.includes('联动') ||
+    lowerText.includes('crossover') ||
+    lowerText.includes('合作') ||
+    lowerText.includes('改编') ||
+    lowerText.includes('衍生')
+  ) {
+    score += 0.2
+  }
+
+  if (relationType === 'reference' || relationType === 'inspired') {
+    score -= 0.05
+  }
+
+  return Math.max(0, Math.min(1, score))
+}
+
 function extractTargetWork(text: string, sourceWork: string): string | null {
-  const cleaned = text.replace(sourceWork, '').trim()
+  const cleaned = text.replaceAll(sourceWork, '').trim()
 
   const match = cleaned.match(/[《]([^》]+)[》]/)
-  if (match) return match[1]
+  if (match) {
+    return sanitizeExtractedWorkName(match[1])
+  }
 
   const nameMatch = cleaned.match(/([A-Za-z0-9\u4e00-\u9fa5]{2,20}(?:作品|漫画|动画|小说|游戏|电影|剧))/g)
   if (nameMatch && nameMatch.length > 0) {
-    return nameMatch[0].replace(/(作品|漫画|动画|小说|游戏|电影|剧)$/, '')
+    const normalized = nameMatch[0].replace(/(作品|漫画|动画|小说|游戏|电影|剧)$/, '')
+    return sanitizeExtractedWorkName(normalized)
   }
 
   return null
+}
+
+function sanitizeExtractedWorkName(value: string): string | null {
+  const cleaned = value.replace(/[\[\]【】()（）]/g, '').trim()
+  if (!cleaned) return null
+  if (cleaned.length < 2 || cleaned.length > 40) return null
+
+  const lowered = cleaned.toLowerCase()
+  const blocked = ['维基百科', '自由的百科全书', '百科', 'official', 'news', 'press release']
+  if (blocked.some(keyword => lowered.includes(keyword))) {
+    return null
+  }
+
+  return cleaned
 }

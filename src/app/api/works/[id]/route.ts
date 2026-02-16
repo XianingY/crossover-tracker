@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { invalidateGraphSnapshotCache } from '@/lib/graph-cache'
 import { prisma } from '@/lib/prisma'
+import { buildAliasRecords } from '@/lib/work-alias'
 import { GraphService } from '@/services/graph.service'
 
 const workTypeSchema = z
@@ -41,6 +42,7 @@ const updateWorkSchema = z
     description: nullableTextSchema,
     coverUrl: nullableUrlSchema,
     isCentral: z.boolean().optional(),
+    aliases: z.array(z.string().trim().min(1).max(120)).max(20).optional(),
   })
   .refine(data => Object.values(data).some(value => value !== undefined), {
     message: 'At least one valid field must be provided',
@@ -56,6 +58,9 @@ export async function GET(
   const work = await prisma.work.findUnique({
     where: { id },
     include: {
+      aliases: {
+        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+      },
       connectionsFrom: {
         include: {
           toWork: true,
@@ -97,15 +102,85 @@ export async function PUT(
       return NextResponse.json({ error: message || 'Invalid request body' }, { status: 400 })
     }
 
-    const work = await prisma.work.update({
-      where: { id },
-      data: {
-        title: parsed.data.title,
-        type: parsed.data.type,
-        description: parsed.data.description,
-        coverUrl: parsed.data.coverUrl,
-        isCentral: parsed.data.isCentral,
+    const work = await prisma.$transaction(async tx => {
+      const existing = await tx.work.findUnique({
+        where: { id },
+        select: { id: true, title: true },
+      })
+      if (!existing) {
+        throw new Error('Work not found')
       }
+
+      const nextTitle = parsed.data.title || existing.title
+      const updated = await tx.work.update({
+        where: { id },
+        data: {
+          title: parsed.data.title,
+          type: parsed.data.type,
+          description: parsed.data.description,
+          coverUrl: parsed.data.coverUrl,
+          isCentral: parsed.data.isCentral,
+        }
+      })
+
+      if (parsed.data.aliases !== undefined) {
+        const aliasRecords = buildAliasRecords(nextTitle, parsed.data.aliases)
+        await tx.workAlias.deleteMany({
+          where: { workId: id },
+        })
+
+        if (aliasRecords.length > 0) {
+          await tx.workAlias.createMany({
+            data: aliasRecords.map(record => ({
+              workId: id,
+              alias: record.alias,
+              normalizedAlias: record.normalizedAlias,
+              isPrimary: record.isPrimary,
+            })),
+            skipDuplicates: true,
+          })
+        }
+      } else if (nextTitle !== existing.title) {
+        const titleAlias = buildAliasRecords(nextTitle, [])[0]
+        if (titleAlias) {
+          await tx.workAlias.updateMany({
+            where: { workId: id, isPrimary: true },
+            data: { isPrimary: false },
+          })
+
+          await tx.workAlias.createMany({
+            data: [
+              {
+                workId: id,
+                alias: titleAlias.alias,
+                normalizedAlias: titleAlias.normalizedAlias,
+                isPrimary: true,
+              },
+            ],
+            skipDuplicates: true,
+          })
+
+          await tx.workAlias.updateMany({
+            where: {
+              workId: id,
+              normalizedAlias: titleAlias.normalizedAlias,
+            },
+            data: {
+              alias: titleAlias.alias,
+              isPrimary: true,
+            },
+          })
+        }
+      }
+
+      return tx.work.findUniqueOrThrow({
+        where: { id: updated.id },
+        include: {
+          aliases: {
+            orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+          },
+        },
+      })
     })
 
     await invalidateGraphSnapshotCache()
@@ -113,6 +188,9 @@ export async function PUT(
     return NextResponse.json(work)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to update work'
+    if (message === 'Work not found') {
+      return NextResponse.json({ error: message }, { status: 404 })
+    }
     return NextResponse.json(
       { error: message },
       { status: 400 }
