@@ -1,20 +1,29 @@
 @import "tailwindcss";
 
 :root {
-  /* Slate-like palette */
-  --background: #f8fafc;
+  --background: #f5f7fb;
   --foreground: #0f172a;
   
-  --primary: #4f46e5;
+  --primary: #3f51b5;
   --primary-foreground: #ffffff;
+
+  --accent: #0ea5a8;
+  --accent-foreground: #ffffff;
   
-  --muted: #f1f5f9;
-  --muted-foreground: #64748b;
+  --muted: #eaf0fb;
+  --muted-foreground: #52617a;
   
   --card: #ffffff;
   --card-foreground: #0f172a;
   
   --border: #e2e8f0;
+
+  --level-0: #d33a4a;
+  --level-1: #ea6e2f;
+  --level-2: #cf9b22;
+  --level-3: #2e9a62;
+  --level-4: #2e6dbc;
+  --level-5: #6d56b2;
 }
 
 @theme inline {
@@ -22,31 +31,37 @@
   --color-foreground: var(--foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-border: var(--border);
   
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  --font-sans: var(--font-sans-custom), "PingFang SC", "Hiragino Sans GB", sans-serif;
+  --font-serif: var(--font-serif-custom), "Noto Serif SC", serif;
+  --font-mono: ui-monospace, SFMono-Regular, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #020617;
+    --background: #0a1120;
     --foreground: #f8fafc;
     
-    --primary: #6366f1;
+    --primary: #5f72d6;
     --primary-foreground: #ffffff;
+
+    --accent: #22b8b2;
+    --accent-foreground: #04111a;
     
-    --muted: #1e293b;
+    --muted: #1a273e;
     --muted-foreground: #94a3b8;
     
-    --card: #0f172a;
+    --card: #111b30;
     --card-foreground: #f8fafc;
     
-    --border: #1e293b;
+    --border: #27344e;
   }
 }
 
@@ -54,4 +69,14 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+  background-image:
+    radial-gradient(circle at 8% 12%, rgba(63, 81, 181, 0.12), transparent 32%),
+    radial-gradient(circle at 84% 20%, rgba(14, 165, 168, 0.1), transparent 30%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.65), rgba(255, 255, 255, 0.65));
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-serif);
 }

@@ -15,6 +15,7 @@ const navItems: NavItem[] = [
     { label: '图谱概览', href: '/' },
     { label: '作品管理', href: '/works' },
     { label: '添加作品', href: '/works/new' },
+    { label: '证据审核', href: '/admin/evidences' },
 ]
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -22,7 +23,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
     return (
-        <div className="min-h-screen bg-gray-50 flex">
+        <div className="min-h-screen bg-transparent flex">
             {/* Mobile Overlay */}
             {isSidebarOpen && (
                 <div
@@ -34,14 +35,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {/* Sidebar */}
             <aside
                 className={cn(
-                    "fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-200 ease-in-out lg:transform-none flex flex-col",
+                    "fixed lg:static inset-y-0 left-0 z-50 w-72 bg-white/95 border-r border-slate-200/80 shadow-sm transform transition-transform duration-200 ease-in-out lg:transform-none flex flex-col backdrop-blur",
                     isSidebarOpen ? "translate-x-0" : "-translate-x-full"
                 )}
             >
-                <div className="h-16 flex items-center px-6 border-b border-gray-100">
-                    <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-violet-600">
-                        Crossover Tracker
-                    </h1>
+                <div className="px-6 py-6 border-b border-slate-100">
+                    <h1 className="text-xl font-semibold text-slate-900">Crossover Tracker</h1>
+                    <p className="mt-1 text-xs text-slate-500">跨媒介联动关系管理</p>
                 </div>
 
                 <nav className="flex-1 p-4 space-y-1">
@@ -53,10 +53,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                                 href={item.href}
                                 onClick={() => setIsSidebarOpen(false)}
                                 className={cn(
-                                    "flex items-center px-4 py-2.5 text-sm font-medium rounded-lg transition-colors",
+                                    "flex items-center px-4 py-2.5 text-sm font-medium rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2",
                                     isActive
-                                        ? "bg-indigo-50 text-indigo-700"
-                                        : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                                        ? "bg-indigo-600 text-white shadow-sm"
+                                        : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
                                 )}
                             >
                                 {item.label}
@@ -65,9 +65,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     })}
                 </nav>
 
-                <div className="p-4 border-t border-gray-100">
-                    <div className="text-xs text-gray-400 text-center">
-                        v0.1.0 Alpha
+                <div className="p-4 border-t border-slate-100">
+                    <div className="text-xs text-slate-400 text-center">
+                        v0.1.0 alpha
                     </div>
                 </div>
             </aside>
@@ -75,11 +75,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {/* Main Content */}
             <div className="flex-1 flex flex-col min-w-0">
                 {/* Mobile Header */}
-                <header className="lg:hidden h-16 bg-white border-b border-gray-200 flex items-center px-4 justify-between">
-                    <span className="font-semibold text-gray-900">Crossover Tracker</span>
+                <header className="lg:hidden h-16 bg-white/95 border-b border-slate-200 flex items-center px-4 justify-between backdrop-blur">
+                    <span className="font-semibold text-slate-900">Crossover Tracker</span>
                     <button
                         onClick={() => setIsSidebarOpen(true)}
-                        className="p-2 -mr-2 text-gray-600 hover:bg-gray-100 rounded-md"
+                        className="p-2 -mr-2 text-slate-600 hover:bg-slate-100 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                        type="button"
+                        aria-label="打开导航菜单"
                     >
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
