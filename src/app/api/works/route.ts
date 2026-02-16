@@ -41,15 +41,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const { title, type, description, coverUrl, isCentral } = body
-    
-    // 如果设为中心作品，先取消其他中心
-    if (isCentral) {
-      await prisma.work.updateMany({
-        where: { isCentral: true },
-        data: { isCentral: false }
-      })
-    }
-    
+
     const work = await prisma.work.create({
       data: {
         title,

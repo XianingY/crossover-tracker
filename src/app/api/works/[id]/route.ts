@@ -46,15 +46,7 @@ export async function PUT(
   
   try {
     const body = await request.json()
-    
-    // 如果设为中心作品，先取消其他中心
-    if (body.isCentral) {
-      await prisma.work.updateMany({
-        where: { isCentral: true, NOT: { id } },
-        data: { isCentral: false }
-      })
-    }
-    
+
     const work = await prisma.work.update({
       where: { id },
       data: {
