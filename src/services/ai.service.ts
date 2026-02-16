@@ -1,7 +1,7 @@
 /**
  * AI Search Service
  * 
- * 使用免费的网页搜索服务实现搜索功能
+ * 使用博查AI搜索API (国内可用)
  */
 
 export interface SearchResult {
@@ -24,14 +24,48 @@ export interface WorkConnection {
   evidence: string
 }
 
-/**
- * 使用 DuckDuckGo API 进行网页搜索
- */
+function getBochaApiKey(): string | undefined {
+  return process.env.BOCHA_API_KEY
+}
+
 export async function searchWeb(query: string): Promise<SearchResult[]> {
+  const apiKey = getBochaApiKey()
+  
+  if (apiKey) {
+    try {
+      const response = await fetch('https://api.bochaai.com/v1/web-search', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          query,
+          count: 10,
+          summary: true
+        })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        
+        if (data.webPages?.value) {
+          return data.webPages.value.map((item: any) => ({
+            title: item.name || '',
+            url: item.url || '',
+            snippet: item.summary || item.snippet || ''
+          }))
+        }
+      }
+    } catch (error) {
+      console.error('Bocha API error:', error)
+    }
+  }
+
   try {
     const encodedQuery = encodeURIComponent(query)
     const response = await fetch(
-      `https://api.duckduckgo.com/?q=${encodedQuery}&format=json&no_html=1&skip_disambig=1`,
+      `https://r.jina.ai/http://ddg-api.herokuapp.com/search?q=${encodedQuery}&limit=10`,
       {
         headers: {
           'Accept': 'application/json'
@@ -39,54 +73,36 @@ export async function searchWeb(query: string): Promise<SearchResult[]> {
       }
     )
 
-    if (!response.ok) {
-      throw new Error(`Search failed: ${response.status}`)
-    }
-
-    const data = await response.json()
-
-    if (!data.RelatedTopics || data.RelatedTopics.length === 0) {
-      return []
-    }
-
-    const results: SearchResult[] = []
-    
-    for (const topic of data.RelatedTopics) {
-      if (topic.Text && topic.FirstURL) {
-        results.push({
-          title: topic.Text.split(' - ')[0] || topic.Text,
-          url: topic.FirstURL,
-          snippet: topic.Text
-        })
+    if (response.ok) {
+      const data = await response.json()
+      
+      if (Array.isArray(data) && data.length > 0) {
+        return data.map((item: any) => ({
+          title: item.title || '',
+          url: item.url || '',
+          snippet: item.snippet || item.body || ''
+        }))
       }
     }
-
-    return results.slice(0, 15)
   } catch (error) {
-    console.error('Web search error:', error)
-    throw new Error('搜索失败，请稍后重试')
+    console.error('Fallback search error:', error)
   }
+
+  throw new Error('搜索服务暂不可用。请在 Vercel 后台配置 BOCHA_API_KEY')
 }
 
-/**
- * 图像理解 - 使用外部服务分析图片
- * 注意：免费方案有限，需要配置付费API
- */
 export async function analyzeImage(
   imageUrl: string, 
   prompt: string = '这张图片是什么作品？请给出作品名称、类型。'
 ): Promise<ImageAnalysisResult> {
   return {
-    description: `图片分析功能需要配置付费API。当前图片URL: ${imageUrl.substring(0, 50)}...`,
+    description: `图片分析需要配置付费API。当前图片: ${imageUrl.substring(0, 30)}...`,
     workName: undefined,
     characters: [],
     confidence: 0
   }
 }
 
-/**
- * 搜索作品联动信息
- */
 export async function searchConnections(workName: string): Promise<WorkConnection[]> {
   const query = `${workName} 联动 改编 衍生 客串 crossover`
   const results = await searchWeb(query)
@@ -103,9 +119,6 @@ export async function searchConnections(workName: string): Promise<WorkConnectio
   return connections
 }
 
-/**
- * 搜索特定作品之间的证据
- */
 export async function searchEvidence(workA: string, workB: string): Promise<SearchResult[]> {
   const query = `${workA} ${workB} 联动 合作 客串 改编`
   const results = await searchWeb(query)
