@@ -4,12 +4,6 @@ import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import ImageUploader from '@/components/ai/ImageUploader'
 
-interface SearchResult {
-  title: string
-  url: string
-  snippet: string
-}
-
 interface WorkConnection {
   fromWork: string
   toWork: string
@@ -19,6 +13,8 @@ interface WorkConnection {
   fromImage?: string
   toImage?: string
   source?: 'db' | 'ai'
+  sourceName?: string
+  sourceLevel?: 'official' | 'trusted' | 'other'
 }
 
 interface Work {
@@ -179,7 +175,7 @@ export default function SearchPage() {
     <div className="mx-auto max-w-4xl px-4 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-slate-800 mb-2">AI 搜索</h1>
-        <p className="text-slate-600">搜索作品名称，找出它与其他作品的联动关系</p>
+        <p className="text-slate-600">搜索作品名称，优先使用官方发布信息，并过滤成人与低质站点</p>
       </div>
 
       <div className="flex gap-2 mb-6">
@@ -344,6 +340,13 @@ export default function SearchPage() {
                         </div>
                         {conn.evidence && (
                           <p className="text-sm text-slate-500 line-clamp-2">{conn.evidence}</p>
+                        )}
+                        {conn.sourceName && (
+                          <p className="mt-1 text-xs text-slate-400">
+                            证据来源: {conn.sourceName}
+                            {conn.sourceLevel === 'official' && '（官方）'}
+                            {conn.sourceLevel === 'trusted' && '（权威）'}
+                          </p>
                         )}
                       </div>
                     </div>

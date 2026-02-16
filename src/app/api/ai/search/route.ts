@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { searchWeb, searchConnections, searchEvidence, identifyWorks } from '@/services/ai.service'
+import { searchConnections, searchEvidence, identifyWorks } from '@/services/ai.service'
 import { prisma } from '@/lib/prisma'
+
+interface ApiConnection {
+  fromWork: string
+  toWork: string
+  relationType: string
+  evidence: string
+  evidenceUrl: string
+  source: 'db' | 'ai'
+  fromImage?: string
+  toImage?: string
+  sourceName?: string
+  sourceLevel?: 'official' | 'trusted' | 'other'
+}
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -32,7 +45,7 @@ export async function GET(request: NextRequest) {
 
       case 'connections': {
         // First, check the local database for existing connections
-        const dbConnections: any[] = []
+        const dbConnections: ApiConnection[] = []
         const dbWorks = await prisma.work.findMany({
           where: { title: { contains: query, mode: 'insensitive' } },
           include: {
@@ -70,11 +83,11 @@ export async function GET(request: NextRequest) {
 
         // Then search the web for more connections
         const aiConnections = await searchConnections(query)
-        const aiWithSource = aiConnections.map(c => ({ ...c, source: 'ai' }))
+        const aiWithSource: ApiConnection[] = aiConnections.map(c => ({ ...c, source: 'ai' }))
 
         // Merge and deduplicate by target work name
         const seen = new Set<string>()
-        const merged = []
+        const merged: ApiConnection[] = []
         for (const conn of [...dbConnections, ...aiWithSource]) {
           const key = `${conn.fromWork}-${conn.toWork}`.toLowerCase()
           const reverseKey = `${conn.toWork}-${conn.fromWork}`.toLowerCase()

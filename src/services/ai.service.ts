@@ -9,7 +9,11 @@ export interface SearchResult {
   url: string
   snippet: string
   imageUrl?: string
+  sourceName?: string
+  sourceLevel?: SourceLevel
 }
+
+export type SourceLevel = 'official' | 'trusted' | 'other'
 
 export interface ImageAnalysisResult {
   description: string
@@ -26,6 +30,8 @@ export interface WorkConnection {
   evidenceUrl: string
   fromImage?: string
   toImage?: string
+  sourceName?: string
+  sourceLevel?: SourceLevel
 }
 
 export interface WorkCandidate {
@@ -40,13 +46,36 @@ function getTavilyApiKey(): string | undefined {
   return process.env.TAVILY_API_KEY
 }
 
-const BLOCKED_DOMAINS = [
+interface SearchWebOptions {
+  preferOfficial?: boolean
+  officialOrTrustedOnly?: boolean
+  maxResults?: number
+}
+
+interface TavilySearchItem {
+  title?: string
+  url?: string
+  content?: string
+  snippet?: string
+  images?: string[]
+}
+
+interface TavilySearchResponse {
+  results?: TavilySearchItem[]
+}
+
+interface RankedSearchResult extends SearchResult {
+  priority: number
+  sourceName: string
+  sourceLevel: SourceLevel
+}
+
+const BLOCKED_DOMAIN_FRAGMENTS = [
   // Adult / NSFW
   '91porn', 'pornhub', 'xvideos', 'xnxx', 'xhamster', 'redtube',
   'youporn', 'tube8', 'spankbang', 'eporner', 'beeg',
-  'jav', 'javbus', 'javdb', 'javlibrary', 'javmost', 'avgle',
+  'javbus', 'javdb', 'javlibrary', 'javmost', 'avgle',
   'jable', 'hanime1', 'hanime', 'hentai', 'nhentai', 'hitomi',
-  'porn', 'adult', 'xxx', 'sex', 'nude', 'nsfw', 'erotic',
   'r18', 'dmm.co.jp/digital/video', 'fanza', 'fc2',
   'missav', 'supjav', 'thisav', 'myavsuper',
   // Piracy / file hosting
@@ -63,7 +92,13 @@ const BLOCKED_DOMAINS = [
   'bit.ly/adult', 'tinyurl.com/nsfw',
 ]
 
-// Keywords in title/snippet that indicate adult or spam content
+const BLOCKED_HOST_TOKENS = [
+  'porn', 'adult', 'xxx', 'sex', 'nsfw', 'hentai', 'erotic'
+]
+
+const BLOCKED_TLDS = ['.xxx', '.sex', '.porn', '.adult']
+
+// Keywords in title/snippet that indicate adult/spam content
 const BLOCKED_CONTENT_KEYWORDS = [
   '色情', '成人', 'AV女优', '女优', '番号', '无码', '有码',
   '裸体', '性爱', '做爱', '约炮', '一夜情', '情色',
@@ -72,35 +107,114 @@ const BLOCKED_CONTENT_KEYWORDS = [
   'hentai', 'erotic', 'nude', 'naked', 'nsfw',
 ]
 
-const AUTHORITY_SOURCES = [
-  { pattern: 'baike.baidu.com', name: '百度百科', priority: 10 },
-  { pattern: 'wikipedia.org', name: '维基百科', priority: 9 },
-  { pattern: 'bilibili.com', name: 'Bilibili', priority: 8 },
-  { pattern: 'douban.com', name: '豆瓣', priority: 7 },
-  { pattern: 'weibo.com', name: '微博', priority: 6 },
-  { pattern: 'youtube.com', name: 'YouTube', priority: 5 },
-  { pattern: 'pixiv.net', name: 'Pixiv', priority: 4 },
-  { pattern: 'twitter.com', name: 'Twitter', priority: 3 },
-  { pattern: 'instagram.com', name: 'Instagram', priority: 2 },
-  { pattern: 'zhihu.com', name: '知乎', priority: 3 },
-  { pattern: 'myanimelist.net', name: 'MyAnimeList', priority: 6 },
-  { pattern: 'anidb.net', name: 'AniDB', priority: 5 },
-  { pattern: 'bangumi.tv', name: 'Bangumi', priority: 7 },
-  { pattern: 'anilist.co', name: 'AniList', priority: 5 },
+// Keywords that usually indicate junk pages rather than authoritative references
+const LOW_QUALITY_CONTENT_KEYWORDS = [
+  '免费在线观看', '在线看', '下载地址', '磁力', 'bt下载', '迅雷下载',
+  '网盘', '资源分享', '最新地址', '点击进入', '备用网址',
+  '破解版', '无删减', '福利视频'
 ]
 
-function getSourcePriority(url: string): number {
+const OFFICIAL_TEXT_MARKERS = [
+  '官方', '官网', '官宣', '官方公告', '官方新闻', '制作委员会',
+  'official', 'official site', 'official website', 'official announcement',
+  'press release', 'news release', '公式', '公式サイト', '公式発表'
+]
+
+const OFFICIAL_PLATFORM_DOMAINS = [
+  'weibo.com',
+  'bilibili.com',
+  'youtube.com',
+  'x.com',
+  'twitter.com',
+  'instagram.com',
+  'facebook.com',
+  'tiktok.com'
+]
+
+const TAVILY_EXCLUDE_DOMAINS = [
+  'pornhub.com', 'xvideos.com', 'xnxx.com', 'xhamster.com',
+  '91porn.com', 'javbus.com', 'jable.tv', 'hanime1.me',
+  'nhentai.net', 'hitomi.la', 'missav.com', 'avgle.com',
+  'supjav.com', 'thisav.com', 'myavsuper.com', 'fanza.com',
+  'torrentgalaxy.to', 'thepiratebay.org', '1337x.to'
+]
+
+const AUTHORITY_SOURCES = [
+  { pattern: 'baike.baidu.com', name: '百度百科', priority: 18 },
+  { pattern: 'wikipedia.org', name: '维基百科', priority: 18 },
+  { pattern: 'bilibili.com', name: 'Bilibili', priority: 16 },
+  { pattern: 'douban.com', name: '豆瓣', priority: 14 },
+  { pattern: 'weibo.com', name: '微博', priority: 15 },
+  { pattern: 'youtube.com', name: 'YouTube', priority: 15 },
+  { pattern: 'pixiv.net', name: 'Pixiv', priority: 10 },
+  { pattern: 'twitter.com', name: 'Twitter', priority: 12 },
+  { pattern: 'x.com', name: 'X', priority: 12 },
+  { pattern: 'instagram.com', name: 'Instagram', priority: 10 },
+  { pattern: 'zhihu.com', name: '知乎', priority: 10 },
+  { pattern: 'myanimelist.net', name: 'MyAnimeList', priority: 13 },
+  { pattern: 'anidb.net', name: 'AniDB', priority: 12 },
+  { pattern: 'bangumi.tv', name: 'Bangumi', priority: 14 },
+  { pattern: 'anilist.co', name: 'AniList', priority: 12 },
+]
+
+function normalizeHost(hostname: string): string {
+  return hostname.toLowerCase().replace(/^www\./, '')
+}
+
+function safeParseUrl(url: string): URL | null {
+  try {
+    return new URL(url)
+  } catch {
+    return null
+  }
+}
+
+function domainMatches(hostname: string, domain: string): boolean {
+  return hostname === domain || hostname.endsWith(`.${domain}`)
+}
+
+function findAuthoritySource(url: string) {
+  const parsed = safeParseUrl(url)
+  if (!parsed) return null
+
+  const host = normalizeHost(parsed.hostname)
   for (const source of AUTHORITY_SOURCES) {
-    if (url.includes(source.pattern)) {
-      return source.priority
+    if (domainMatches(host, source.pattern)) {
+      return source
     }
   }
+
+  return null
+}
+
+function getSourcePriority(url: string): number {
+  const source = findAuthoritySource(url)
+  if (source) return source.priority
   return 0
 }
 
 function isBlocked(url: string): boolean {
+  const parsed = safeParseUrl(url)
+  if (!parsed) return true
+
+  const host = normalizeHost(parsed.hostname)
   const lowerUrl = url.toLowerCase()
-  return BLOCKED_DOMAINS.some(blocked => lowerUrl.includes(blocked))
+
+  if (BLOCKED_TLDS.some(tld => host.endsWith(tld))) {
+    return true
+  }
+
+  const hostTokens = host.split(/[.-]/).filter(Boolean)
+  if (hostTokens.some(token => BLOCKED_HOST_TOKENS.includes(token))) {
+    return true
+  }
+
+  return BLOCKED_DOMAIN_FRAGMENTS.some(fragment => {
+    if (fragment.includes('/')) {
+      return lowerUrl.includes(fragment)
+    }
+    return host.includes(fragment)
+  })
 }
 
 function isContentBlocked(title: string, snippet: string): boolean {
@@ -108,21 +222,91 @@ function isContentBlocked(title: string, snippet: string): boolean {
   return BLOCKED_CONTENT_KEYWORDS.some(keyword => text.includes(keyword.toLowerCase()))
 }
 
-function getSourceName(url: string): string {
-  for (const source of AUTHORITY_SOURCES) {
-    if (url.includes(source.pattern)) {
-      return source.name
-    }
-  }
-  return '网络'
+function isLowQualityContent(title: string, snippet: string): boolean {
+  const text = (title + ' ' + snippet).toLowerCase()
+  return LOW_QUALITY_CONTENT_KEYWORDS.some(keyword => text.includes(keyword.toLowerCase()))
 }
 
-export async function searchWeb(query: string): Promise<SearchResult[]> {
+function classifySourceLevel(url: string, title: string, snippet: string): SourceLevel {
+  const parsed = safeParseUrl(url)
+  if (!parsed) return 'other'
+
+  const host = normalizeHost(parsed.hostname)
+  const path = parsed.pathname.toLowerCase()
+  const text = `${title} ${snippet}`.toLowerCase()
+
+  const hasOfficialMarker = OFFICIAL_TEXT_MARKERS.some(marker => text.includes(marker.toLowerCase()))
+  const hasOfficialInUrl = host.includes('official') || path.includes('/official')
+  const isOfficialPlatform = OFFICIAL_PLATFORM_DOMAINS.some(domain => domainMatches(host, domain))
+  const authorityPriority = getSourcePriority(url)
+
+  if (hasOfficialInUrl) {
+    return 'official'
+  }
+
+  if (hasOfficialMarker && (isOfficialPlatform || authorityPriority >= 12)) {
+    return 'official'
+  }
+
+  if (isOfficialPlatform || authorityPriority >= 12) {
+    return 'trusted'
+  }
+
+  return 'other'
+}
+
+function getSourceName(url: string): string {
+  const source = findAuthoritySource(url)
+  if (source) {
+    return source.name
+  }
+
+  const parsed = safeParseUrl(url)
+  if (!parsed) {
+    return '网络'
+  }
+
+  return normalizeHost(parsed.hostname)
+}
+
+function scoreSearchResult(url: string, sourceLevel: SourceLevel, preferOfficial: boolean): number {
+  const base = getSourcePriority(url)
+  const levelBonus = sourceLevel === 'official' ? 100 : sourceLevel === 'trusted' ? 40 : 0
+  const nonOfficialPenalty = preferOfficial && sourceLevel === 'other' ? -20 : 0
+  return base + levelBonus + nonOfficialPenalty
+}
+
+function dedupeResults(results: RankedSearchResult[]): RankedSearchResult[] {
+  const seen = new Set<string>()
+
+  return results.filter(result => {
+    const parsed = safeParseUrl(result.url)
+    const host = parsed ? normalizeHost(parsed.hostname) : result.url
+    const key = `${host}|${result.title.trim().toLowerCase()}`
+
+    if (seen.has(key)) {
+      return false
+    }
+
+    seen.add(key)
+    return true
+  })
+}
+
+export async function searchWeb(query: string, options: SearchWebOptions = {}): Promise<SearchResult[]> {
   const apiKey = getTavilyApiKey()
 
   if (!apiKey) {
     throw new Error('搜索服务未配置。请在 Vercel 后台配置 TAVILY_API_KEY')
   }
+
+  const preferOfficial = options.preferOfficial ?? false
+  const officialOrTrustedOnly = options.officialOrTrustedOnly ?? false
+  const maxResults = options.maxResults ?? 20
+
+  const refinedQuery = preferOfficial
+    ? `${query} 官方 官网 官方公告 官宣 公式サイト official announcement press release`
+    : query
 
   try {
     const response = await fetch('https://api.tavily.com/search', {
@@ -132,16 +316,12 @@ export async function searchWeb(query: string): Promise<SearchResult[]> {
       },
       body: JSON.stringify({
         api_key: apiKey,
-        query,
-        max_results: 20,
+        query: refinedQuery,
+        max_results: Math.max(maxResults * 2, 20),
         include_answer: false,
         include_raw_content: false,
         include_images: true,
-        exclude_domains: [
-          'pornhub.com', 'xvideos.com', 'xnxx.com', 'xhamster.com',
-          '91porn.com', 'javbus.com', 'jable.tv', 'hanime1.me',
-          'nhentai.net', 'hitomi.la', 'missav.com', 'avgle.com',
-        ]
+        exclude_domains: TAVILY_EXCLUDE_DOMAINS
       })
     })
 
@@ -149,25 +329,53 @@ export async function searchWeb(query: string): Promise<SearchResult[]> {
       throw new Error(`Tavily API error: ${response.status}`)
     }
 
-    const data = await response.json()
+    const data = await response.json() as TavilySearchResponse
 
     if (data.results && Array.isArray(data.results)) {
-      const results = data.results
-        .filter((item: any) => {
-          const url = item.url || ''
-          const title = item.title || ''
-          const snippet = item.content || item.snippet || ''
-          // Filter by both domain AND content keywords
-          return !isBlocked(url) && !isContentBlocked(title, snippet)
+      const rankedResults = data.results
+        .map((item): RankedSearchResult | null => {
+          const url = (item.url || '').trim()
+          const title = (item.title || '').trim()
+          const snippet = (item.content || item.snippet || '').trim()
+
+          if (!url) {
+            return null
+          }
+
+          if (isBlocked(url) || isContentBlocked(title, snippet) || isLowQualityContent(title, snippet)) {
+            return null
+          }
+
+          const sourceLevel = classifySourceLevel(url, title, snippet)
+          if (officialOrTrustedOnly && sourceLevel === 'other') {
+            return null
+          }
+
+          const sourceName = getSourceName(url)
+
+          return {
+            title,
+            url,
+            snippet,
+            imageUrl: item.images?.[0] || undefined,
+            sourceName,
+            sourceLevel,
+            priority: scoreSearchResult(url, sourceLevel, preferOfficial)
+          }
         })
-        .map((item: any) => ({
-          title: item.title || '',
-          url: item.url || '',
-          snippet: item.content || item.snippet || '',
-          imageUrl: item.images?.[0] || undefined,
-          priority: getSourcePriority(item.url || '')
+        .filter((item): item is RankedSearchResult => item !== null)
+
+      const results = dedupeResults(rankedResults)
+        .sort((a, b) => b.priority - a.priority)
+        .slice(0, maxResults)
+        .map(result => ({
+          title: result.title,
+          url: result.url,
+          snippet: result.snippet,
+          imageUrl: result.imageUrl,
+          sourceName: result.sourceName,
+          sourceLevel: result.sourceLevel
         }))
-        .sort((a: any, b: any) => b.priority - a.priority)
 
       return results
     }
@@ -184,7 +392,7 @@ export async function analyzeImage(
   prompt: string = '这张图片是什么作品？请给出作品名称、类型。'
 ): Promise<ImageAnalysisResult> {
   return {
-    description: `图片分析功能需要配置付费API。当前图片: ${imageUrl.substring(0, 30)}...`,
+    description: `图片分析功能需要配置付费API。提示词: ${prompt}。当前图片: ${imageUrl.substring(0, 30)}...`,
     workName: undefined,
     characters: [],
     confidence: 0
@@ -193,7 +401,11 @@ export async function analyzeImage(
 
 export async function searchConnections(workName: string): Promise<WorkConnection[]> {
   const query = `${workName} 联动 改编 衍生 客串 crossover`
-  const results = await searchWeb(query)
+  const results = await searchWeb(query, {
+    preferOfficial: true,
+    officialOrTrustedOnly: true,
+    maxResults: 20
+  })
 
   const connections: WorkConnection[] = []
 
@@ -209,13 +421,20 @@ export async function searchConnections(workName: string): Promise<WorkConnectio
 
 export async function searchEvidence(workA: string, workB: string): Promise<SearchResult[]> {
   const query = `${workA} ${workB} 联动 合作 客串 改编`
-  const results = await searchWeb(query)
+  const results = await searchWeb(query, {
+    preferOfficial: true,
+    officialOrTrustedOnly: true,
+    maxResults: 10
+  })
 
   return results.slice(0, 5)
 }
 
 export async function identifyWorks(query: string): Promise<WorkCandidate[]> {
-  const results = await searchWeb(query)
+  const results = await searchWeb(query, {
+    preferOfficial: true,
+    maxResults: 20
+  })
 
   const candidates: WorkCandidate[] = []
   const seen = new Set<string>()
@@ -303,7 +522,9 @@ function extractConnectionInfo(workName: string, result: SearchResult): WorkConn
     relationType,
     evidence: result.snippet || result.url,
     evidenceUrl: result.url,
-    fromImage: result.imageUrl
+    fromImage: result.imageUrl,
+    sourceName: result.sourceName,
+    sourceLevel: result.sourceLevel
   }
 }
 
