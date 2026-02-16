@@ -40,6 +40,48 @@ function getTavilyApiKey(): string | undefined {
   return process.env.TAVILY_API_KEY
 }
 
+const BLOCKED_DOMAINS = [
+  '91porn', 'jav', 'porn', 'adult', 'xxx', 'sex', 'nude',
+  'bilibili', 'acgyhw', '51chigua', 'jable', 'hanime1', 
+  'xunlei', 'pan.baidu', 'uploaded', 'rapidgator',
+  'weibo', 'zhihu', 'douban'
+]
+
+const AUTHORITY_SOURCES = [
+  { pattern: 'baike.baidu.com', name: '百度百科', priority: 10 },
+  { pattern: 'wikipedia.org', name: '维基百科', priority: 9 },
+  { pattern: 'bilibili.com', name: 'Bilibili', priority: 8 },
+  { pattern: 'douban.com', name: '豆瓣', priority: 7 },
+  { pattern: 'weibo.com', name: '微博', priority: 6 },
+  { pattern: 'youtube.com', name: 'YouTube', priority: 5 },
+  { pattern: 'pixiv.net', name: 'Pixiv', priority: 4 },
+  { pattern: 'twitter.com', name: 'Twitter', priority: 3 },
+  { pattern: 'instagram.com', name: 'Instagram', priority: 2 }
+]
+
+function getSourcePriority(url: string): number {
+  for (const source of AUTHORITY_SOURCES) {
+    if (url.includes(source.pattern)) {
+      return source.priority
+    }
+  }
+  return 0
+}
+
+function isBlocked(url: string): boolean {
+  const lowerUrl = url.toLowerCase()
+  return BLOCKED_DOMAINS.some(blocked => lowerUrl.includes(blocked))
+}
+
+function getSourceName(url: string): string {
+  for (const source of AUTHORITY_SOURCES) {
+    if (url.includes(source.pattern)) {
+      return source.name
+    }
+  }
+  return '网络'
+}
+
 export async function searchWeb(query: string): Promise<SearchResult[]> {
   const apiKey = getTavilyApiKey()
   
@@ -56,7 +98,7 @@ export async function searchWeb(query: string): Promise<SearchResult[]> {
       body: JSON.stringify({
         api_key: apiKey,
         query,
-        max_results: 10,
+        max_results: 15,
         include_answer: false,
         include_raw_content: false,
         include_images: true
@@ -70,12 +112,18 @@ export async function searchWeb(query: string): Promise<SearchResult[]> {
     const data = await response.json()
 
     if (data.results && Array.isArray(data.results)) {
-      return data.results.map((item: any) => ({
-        title: item.title || '',
-        url: item.url || '',
-        snippet: item.content || item.snippet || '',
-        imageUrl: item.images?.[0] || undefined
-      }))
+      const results = data.results
+        .filter((item: any) => !isBlocked(item.url || ''))
+        .map((item: any) => ({
+          title: item.title || '',
+          url: item.url || '',
+          snippet: item.content || item.snippet || '',
+          imageUrl: item.images?.[0] || undefined,
+          priority: getSourcePriority(item.url || '')
+        }))
+        .sort((a: any, b: any) => b.priority - a.priority)
+      
+      return results
     }
 
     return []
@@ -173,13 +221,7 @@ function extractWorkInfo(title: string, snippet: string, url: string, imageUrl?:
     workType = '轻小说'
   }
   
-  let source = '网络'
-  if (url.includes('baike.baidu.com')) source = '百度百科'
-  else if (url.includes('wikipedia.org')) source = '维基百科'
-  else if (url.includes('bilibili.com')) source = 'Bilibili'
-  else if (url.includes('douban.com')) source = '豆瓣'
-  else if (url.includes('weibo.com')) source = '微博'
-  else if (url.includes('youtube.com')) source = 'YouTube'
+  const source = getSourceName(url)
   
   return {
     name: workName,
