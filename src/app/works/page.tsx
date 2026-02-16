@@ -59,7 +59,7 @@ export default function WorksPage() {
     })
     setWorks(works.map(w => ({
       ...w,
-      isCentral: w.id === id
+      isCentral: w.id === id ? true : w.isCentral
     })))
   }
   
