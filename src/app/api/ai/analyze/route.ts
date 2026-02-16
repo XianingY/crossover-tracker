@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { analyzeImage } from '@/services/ai.service'
 import { prisma } from '@/lib/prisma'
+import { captureApiException } from '@/lib/observability'
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,6 +29,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Image analysis error:', error)
+    captureApiException('/api/ai/analyze', error)
     const message = error instanceof Error ? error.message : 'Analysis failed'
     return NextResponse.json({ error: message }, { status: 500 })
   }

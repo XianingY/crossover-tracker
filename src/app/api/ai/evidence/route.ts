@@ -4,6 +4,7 @@ import { searchEvidence } from '@/services/ai.service'
 import { prisma } from '@/lib/prisma'
 import { consumeRateLimit } from '@/lib/rate-limit'
 import { getOrSetCachedValue } from '@/lib/request-cache'
+import { captureApiException } from '@/lib/observability'
 
 const requestSchema = z.object({
   workA: z.string().trim().min(1).max(120),
@@ -24,7 +25,7 @@ function getClientIp(request: NextRequest): string {
 
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request)
-  const rateLimit = consumeRateLimit(`ai-evidence:${ip}`, 20, 10 * 60 * 1000)
+  const rateLimit = await consumeRateLimit(`ai-evidence:${ip}`, 20, 10 * 60 * 1000)
   if (!rateLimit.ok) {
     const retryAfterSeconds = Math.ceil(rateLimit.retryAfterMs / 1000)
     return NextResponse.json(
@@ -80,6 +81,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Evidence save error:', error)
+    captureApiException('/api/ai/evidence', error, { ip })
     const message = error instanceof Error ? error.message : 'Failed to save evidence'
     return NextResponse.json({ error: message }, { status: 500 })
   }

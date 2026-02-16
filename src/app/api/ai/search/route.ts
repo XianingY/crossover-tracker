@@ -4,6 +4,7 @@ import { searchConnections, searchEvidence, identifyWorks } from '@/services/ai.
 import { prisma } from '@/lib/prisma'
 import { consumeRateLimit } from '@/lib/rate-limit'
 import { getOrSetCachedValue } from '@/lib/request-cache'
+import { captureApiException } from '@/lib/observability'
 
 const modeSchema = z.enum(['identify', 'connections', 'evidence'])
 
@@ -58,7 +59,7 @@ function getCacheTtlMs(mode: z.infer<typeof modeSchema>): number {
 
 export async function GET(request: NextRequest) {
   const ip = getClientIp(request)
-  const rateLimit = consumeRateLimit(`ai-search:${ip}`, 40, 10 * 60 * 1000)
+  const rateLimit = await consumeRateLimit(`ai-search:${ip}`, 40, 10 * 60 * 1000)
   if (!rateLimit.ok) {
     const retryAfterSeconds = Math.ceil(rateLimit.retryAfterMs / 1000)
     return NextResponse.json(
@@ -198,6 +199,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(responsePayload)
   } catch (error) {
     console.error('AI search error:', error)
+    captureApiException('/api/ai/search', error, {
+      mode,
+      query,
+      workA,
+      workB,
+    })
     const message = error instanceof Error ? error.message : 'Search failed'
     return NextResponse.json({ error: message }, { status: 500 })
   }
