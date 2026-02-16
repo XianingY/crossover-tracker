@@ -236,6 +236,7 @@ interface ReportQueryConfig {
   id: string
   sectionTitle: string
   sectionDescription: string
+  sectionKeywords: string[]
   query: (workName: string) => string
 }
 
@@ -244,6 +245,9 @@ const REPORT_QUERY_CONFIGS: ReportQueryConfig[] = [
     id: 'comics-film',
     sectionTitle: '美漫与影视联动',
     sectionDescription: '包含漫画客串、电影宣传联动、超级英雄类官方合作。',
+    sectionKeywords: [
+      '漫威', 'dc', '电影', '漫画', '剧场版', 'marvel', 'avengers', 'deadpool', 'superhero',
+    ],
     query: workName =>
       `${workName} 漫威 DC 电影 宣传 联动 crossover collaboration official announcement`,
   },
@@ -251,6 +255,10 @@ const REPORT_QUERY_CONFIGS: ReportQueryConfig[] = [
     id: 'games',
     sectionTitle: '电子游戏联动',
     sectionDescription: '重点覆盖大型在线游戏、联动皮肤、活动公告与版本更新说明。',
+    sectionKeywords: [
+      '游戏', '活动', '皮肤', '联动', '版本', 'game', 'gaming', 'event', 'skin', 'collaboration',
+      'fortnite', 'overwatch',
+    ],
     query: workName =>
       `${workName} 游戏 联动 collaboration game event skin official announcement`,
   },
@@ -258,6 +266,9 @@ const REPORT_QUERY_CONFIGS: ReportQueryConfig[] = [
     id: 'anime-merch',
     sectionTitle: '动漫/品牌/周边联动',
     sectionDescription: '包含动画、特摄、品牌周边、限定联名商品与官方商店信息。',
+    sectionKeywords: [
+      '联名', '周边', '商品', '限定', '官方商店', 'merch', 'merchandise', 'goods', 'store', 'sanrio',
+    ],
     query: workName =>
       `${workName} 联名 周边 collaboration merchandise official store anime crossover`,
   },
@@ -265,10 +276,36 @@ const REPORT_QUERY_CONFIGS: ReportQueryConfig[] = [
     id: 'sports-cross',
     sectionTitle: '体育与跨界合作',
     sectionDescription: '包含体育联盟、服饰品牌、线下活动等跨界合作场景。',
+    sectionKeywords: [
+      '体育', '球队', '联赛', '服饰', '运动', 'sports', 'nba', 'campaign', 'apparel', 'jersey',
+    ],
     query: workName =>
       `${workName} NBA sports collaboration apparel campaign official`,
   },
 ]
+
+const STRONG_CROSSOVER_KEYWORDS = [
+  '联动', '联名', '合作', '联乘', '跨界', '客串',
+  'collaboration', 'crossover', 'cross-over', 'tie-in', 'partnership',
+  'guest appearance', 'cameo', 'team up',
+]
+
+const PROFILE_OR_CHANNEL_HINTS = [
+  'up主', '频道', '主页', '粉丝', '订阅', '播放列表', '合集', '更多精彩视频', 'redirecting to',
+  'channel', 'profile', 'followers', 'subscribe', 'playlist',
+]
+
+const TARGET_WORK_BLOCKED_KEYWORDS = [
+  '维基百科', '自由的百科全书', '百科', 'official', 'press release', 'news', 'announcement', '更新',
+  '活动', '联动', '频道', '主页', '合集', '播放列表', '视频', '官方账号', 'official channel',
+  'youtube', 'bilibili', 'facebook', 'twitter', 'x.com', 'weibo',
+  'collaboration', 'crossover', 'event', 'trailer', 'campaign', 'comparison', 'review',
+]
+
+const KNOWN_WORK_ALIASES: Record<string, string[]> = {
+  我的英雄学院: ['我的英雄學院', 'my hero academia', 'boku no hero academia', '僕のヒーローアカデミア', 'mha'],
+  myheroacademia: ['我的英雄学院', '我的英雄學院', 'boku no hero academia', '僕のヒーローアカデミア', 'mha'],
+}
 
 function normalizeHost(hostname: string): string {
   return hostname.toLowerCase().replace(/^www\./, '')
@@ -463,26 +500,59 @@ function detectRelationType(text: string): RelationType {
   return 'crossover'
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 function stripQueryTerms(value: string, queryTerms: string[]): string {
   let result = value
   for (const term of queryTerms) {
     if (!term) continue
-    result = result.replaceAll(term, ' ')
+    const pattern = new RegExp(escapeRegExp(term), 'giu')
+    result = result.replace(pattern, ' ')
   }
   return result.replace(/\s+/g, ' ').trim()
 }
 
 function extractTargetFromTitleOrSnippet(value: string, queryTerms: string[]): string | null {
   const noQueryText = stripQueryTerms(value, queryTerms)
+
+  const pairMatches = noQueryText.matchAll(
+    /([A-Za-z0-9\u4e00-\u9fa5][A-Za-z0-9\u4e00-\u9fa5\s:：'’\-]{1,36})\s*[xX×&]\s*([A-Za-z0-9\u4e00-\u9fa5][A-Za-z0-9\u4e00-\u9fa5\s:：'’\-]{1,36})/gu
+  )
+
+  for (const match of pairMatches) {
+    const left = sanitizeExtractedWorkName(match[1])
+    const right = sanitizeExtractedWorkName(match[2])
+    const bestSide = [left, right]
+      .filter((item): item is string => Boolean(item))
+      .filter(side => isValidTargetWorkName(side) && !isSameWork(side, queryTerms))
+      .sort((a, b) => scoreTargetCandidate(b) - scoreTargetCandidate(a))[0]
+
+    if (bestSide && scoreTargetCandidate(bestSide) > 0) {
+      return bestSide
+    }
+  }
+
   const bracketMatch = noQueryText.match(/[《【\[]([^》】\]]+)[》】\]]/)
   if (bracketMatch) {
-    return sanitizeExtractedWorkName(bracketMatch[1])
+    const candidate = sanitizeExtractedWorkName(bracketMatch[1])
+    if (candidate && isValidTargetWorkName(candidate) && !isSameWork(candidate, queryTerms)) {
+      return candidate
+    }
   }
 
   const titleHead = noQueryText.split(' - ')[0].split('|')[0].trim()
   if (titleHead.length >= 2 && titleHead.length <= 40) {
     const cleaned = sanitizeExtractedWorkName(titleHead)
-    if (cleaned) return cleaned
+    if (
+      cleaned &&
+      isValidTargetWorkName(cleaned) &&
+      !isSameWork(cleaned, queryTerms) &&
+      scoreTargetCandidate(cleaned) > 0
+    ) {
+      return cleaned
+    }
   }
 
   const pattern =
@@ -492,6 +562,8 @@ function extractTargetFromTitleOrSnippet(value: string, queryTerms: string[]): s
     const candidate = sanitizeExtractedWorkName(raw.replace(/(动画|漫画|电影|游戏|作品)$/u, '').trim())
     if (!candidate) continue
     if (candidate.length < 2 || candidate.length > 40) continue
+    if (!isValidTargetWorkName(candidate) || isSameWork(candidate, queryTerms)) continue
+    if (scoreTargetCandidate(candidate) <= 0) continue
     return candidate
   }
 
@@ -503,23 +575,194 @@ function sanitizeExtractedWorkName(value: string): string | null {
   if (!cleaned || cleaned.length < 2 || cleaned.length > 40) return null
 
   const lowered = cleaned.toLowerCase()
-  const blocked = [
-    '维基百科',
-    '自由的百科全书',
-    '百科',
-    'official',
-    'press release',
-    'news',
-    'announcement',
-    '更新',
-    '活动',
-    '联动',
-  ]
-  if (blocked.some(keyword => lowered.includes(keyword))) {
+  if (TARGET_WORK_BLOCKED_KEYWORDS.some(keyword => lowered.includes(keyword.toLowerCase()))) {
     return null
   }
 
   return cleaned
+}
+
+function getWorkAliases(workName: string): string[] {
+  const aliases = new Set<string>()
+  const trimmed = workName.trim()
+  if (trimmed) {
+    aliases.add(trimmed)
+  }
+
+  const normalizedKey = normalizeForMatch(trimmed)
+  const knownAliases = KNOWN_WORK_ALIASES[normalizedKey] || KNOWN_WORK_ALIASES[trimmed] || []
+  for (const alias of knownAliases) {
+    if (alias.trim()) {
+      aliases.add(alias.trim())
+    }
+  }
+
+  const bracketAlias = trimmed.match(/[（(]([^）)]+)[）)]/)
+  if (bracketAlias?.[1]) {
+    aliases.add(bracketAlias[1].trim())
+  }
+
+  return Array.from(aliases)
+}
+
+function hasSourceWorkMention(text: string, workName: string): boolean {
+  const normalizedText = normalizeForMatch(text)
+  if (!normalizedText) {
+    return false
+  }
+
+  const aliases = getWorkAliases(workName)
+  for (const alias of aliases) {
+    const normalizedAlias = normalizeForMatch(alias)
+    if (normalizedAlias && normalizedText.includes(normalizedAlias)) {
+      return true
+    }
+  }
+
+  const hanOnly = workName.replace(/[^\p{Script=Han}]/gu, '')
+  if (hanOnly.length >= 4) {
+    const grams = new Set<string>()
+    for (let i = 0; i < hanOnly.length - 1; i += 1) {
+      grams.add(hanOnly.slice(i, i + 2))
+    }
+
+    let hitCount = 0
+    for (const gram of grams) {
+      if (normalizedText.includes(gram)) {
+        hitCount += 1
+      }
+      if (hitCount >= 2) {
+        return true
+      }
+    }
+  }
+
+  const latinTokens = workName
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(token => token.length >= 3)
+  if (latinTokens.length > 0) {
+    const tokenHits = latinTokens.filter(token => normalizedText.includes(token)).length
+    if (tokenHits >= Math.min(2, latinTokens.length)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function hasStrongCrossoverSignal(text: string): boolean {
+  const lower = text.toLowerCase()
+  if (STRONG_CROSSOVER_KEYWORDS.some(keyword => lower.includes(keyword.toLowerCase()))) {
+    return true
+  }
+
+  return /([A-Za-z0-9\u4e00-\u9fa5]{2,30})\s*[xX×&]\s*([A-Za-z0-9\u4e00-\u9fa5]{2,30})/u.test(text)
+}
+
+function matchesSectionKeywords(text: string, keywords: string[]): boolean {
+  const lower = text.toLowerCase()
+  return keywords.some(keyword => lower.includes(keyword.toLowerCase()))
+}
+
+function isLikelyChannelOrProfilePage(result: SearchResult): boolean {
+  const parsed = safeParseUrl(result.url)
+  const host = parsed ? normalizeHost(parsed.hostname) : ''
+  const path = parsed ? parsed.pathname.toLowerCase() : ''
+  const text = `${result.title} ${result.snippet}`.toLowerCase()
+
+  if (host.includes('youtube.com')) {
+    if (
+      path.startsWith('/@') ||
+      path.startsWith('/channel/') ||
+      path.startsWith('/user/') ||
+      path.startsWith('/c/') ||
+      path.startsWith('/playlist')
+    ) {
+      return true
+    }
+  }
+
+  if (host.includes('bilibili.com')) {
+    if (path.startsWith('/space') || path.startsWith('/read/cv')) {
+      return true
+    }
+  }
+
+  if (PROFILE_OR_CHANNEL_HINTS.some(keyword => text.includes(keyword.toLowerCase()))) {
+    return true
+  }
+
+  return false
+}
+
+function isValidTargetWorkName(value: string): boolean {
+  const cleaned = value.trim()
+  if (!cleaned || cleaned.length < 2 || cleaned.length > 40) {
+    return false
+  }
+
+  if (!/[A-Za-z\u4e00-\u9fa5]/u.test(cleaned)) {
+    return false
+  }
+
+  if (/^\d+$/u.test(cleaned)) {
+    return false
+  }
+
+  if (cleaned.split(/\s+/).length > 8) {
+    return false
+  }
+
+  const lower = cleaned.toLowerCase()
+  if (TARGET_WORK_BLOCKED_KEYWORDS.some(keyword => lower.includes(keyword.toLowerCase()))) {
+    return false
+  }
+
+  return true
+}
+
+function scoreTargetCandidate(value: string): number {
+  const cleaned = value.trim()
+  if (!cleaned) {
+    return -10
+  }
+
+  const lower = cleaned.toLowerCase()
+  const words = cleaned.split(/\s+/).filter(Boolean)
+  let score = 0
+
+  if (/《[^》]+》/.test(cleaned)) score += 3
+  if (/[A-Za-z\u4e00-\u9fa5]/u.test(cleaned)) score += 2
+  if (words.length <= 4) score += 2
+  else if (words.length >= 7) score -= 3
+
+  const noisyWords = ['collaboration', 'event', 'trailer', 'campaign', 'official', 'announcement', 'video']
+  for (const word of noisyWords) {
+    if (lower.includes(word)) {
+      score -= 4
+    }
+  }
+
+  if (cleaned.length > 26) score -= 2
+  return score
+}
+
+function isSameWork(candidate: string, names: string[]): boolean {
+  const normalizedCandidate = normalizeForMatch(candidate)
+  if (!normalizedCandidate) {
+    return false
+  }
+
+  return names.some(name => {
+    const normalizedName = normalizeForMatch(name)
+    if (!normalizedName) return false
+    return (
+      normalizedCandidate === normalizedName ||
+      normalizedCandidate.includes(normalizedName) ||
+      normalizedName.includes(normalizedCandidate)
+    )
+  })
 }
 
 function scoreClaimConfidence(
@@ -843,12 +1086,36 @@ function buildSectionClaims(
   results: SearchResult[]
 ): ReportClaim[] {
   const claimMap = new Map<string, ReportClaim>()
-  const queryTerms = [workName]
+  const queryTerms = getWorkAliases(workName)
 
   for (const result of results) {
+    if (isLikelyChannelOrProfilePage(result)) {
+      continue
+    }
+
     const text = `${result.title} ${result.snippet}`.trim()
+    if (!text) {
+      continue
+    }
+
+    if (!matchesSectionKeywords(text, config.sectionKeywords)) {
+      continue
+    }
+
+    if (!hasSourceWorkMention(text, workName)) {
+      continue
+    }
+
+    if (!hasStrongCrossoverSignal(text)) {
+      continue
+    }
+
     const targetWork = extractTargetFromTitleOrSnippet(text, queryTerms)
     if (!targetWork) {
+      continue
+    }
+
+    if (!isValidTargetWorkName(targetWork) || isSameWork(targetWork, queryTerms)) {
       continue
     }
 
@@ -860,7 +1127,7 @@ function buildSectionClaims(
       targetWork,
       workName
     )
-    if (confidence < 0.45) {
+    if (confidence < 0.55) {
       continue
     }
 
@@ -898,12 +1165,7 @@ function buildSectionClaims(
   }
 
   return Array.from(claimMap.values())
-    .filter(claim => {
-      const hasOfficialOrTrusted = claim.citations.some(
-        citation => citation.sourceLevel === 'official' || citation.sourceLevel === 'trusted'
-      )
-      return hasOfficialOrTrusted
-    })
+    .filter(claimHasStrongEvidence)
     .map(claim => ({
       ...claim,
       citations: claim.citations
@@ -918,6 +1180,29 @@ function sourceLevelWeight(level: SourceLevel): number {
   if (level === 'official') return 3
   if (level === 'trusted') return 2
   return 1
+}
+
+function claimHasStrongEvidence(claim: ReportClaim): boolean {
+  const officialCount = claim.citations.filter(citation => citation.sourceLevel === 'official').length
+  if (officialCount >= 1) {
+    return true
+  }
+
+  const trustedHosts = new Set<string>()
+  for (const citation of claim.citations) {
+    if (citation.sourceLevel !== 'trusted') {
+      continue
+    }
+
+    const parsed = safeParseUrl(citation.url)
+    if (!parsed) {
+      continue
+    }
+
+    trustedHosts.add(normalizeHost(parsed.hostname))
+  }
+
+  return trustedHosts.size >= 2
 }
 
 function computeReportStats(sections: ReportSection[]): WorkCrossoverReport['stats'] {
@@ -952,10 +1237,10 @@ function buildReportSummary(
   stats: WorkCrossoverReport['stats']
 ): string {
   if (sections.length === 0 || stats.claims === 0) {
-    return `暂未检索到关于《${workName}》的高可信联动证据，请尝试更具体的关键词（例如英文名、别名或具体联动对象）。`
+    return `按“同证据同时提及《${workName}》与目标作品、且出现联动动作词、并满足证据阈值（1条官方或2个权威来源）”的标准，暂未检索到可用联动。可尝试补充英文名/别名或直接加目标作品关键词。`
   }
 
-  return `围绕《${workName}》共识别到 ${stats.claims} 条联动 claim（${stats.citations} 条证据）。其中官方来源 ${stats.official} 条，权威来源 ${stats.trusted} 条。`
+  return `基于严格联动规则（同证据需命中源作品+目标作品+联动词，且至少1条官方或2个权威来源），围绕《${workName}》识别到 ${stats.claims} 条可用联动 claim（${stats.citations} 条证据）。其中官方来源 ${stats.official} 条，权威来源 ${stats.trusted} 条。`
 }
 
 function extractWorkInfo(

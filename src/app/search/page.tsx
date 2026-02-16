@@ -493,6 +493,9 @@ export default function SearchPage() {
                   《{results.report.workName}》联动深度报告
                 </h2>
                 <p className="mt-2 text-sm text-slate-600">{results.report.summary}</p>
+                <p className="mt-2 text-xs text-slate-500">
+                  联动判定标准：同一证据需同时提及源作品与目标 IP，并出现联动动作词（联动/合作/crossover 等）；每条 claim 至少满足 1 条官方来源或 2 个不同权威来源。
+                </p>
                 <div className="mt-3 flex flex-wrap gap-2 text-xs">
                   <span className="rounded bg-indigo-100 px-2 py-1 text-indigo-700">
                     Claims {results.report.stats.claims}
@@ -508,6 +511,12 @@ export default function SearchPage() {
                   </span>
                 </div>
               </div>
+
+              {results.report.sections.length === 0 && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">
+                  当前关键词下没有通过联动判定门槛的结果。建议补充“英文名/日文名 + 具体联动对象（如 Fortnite / Overwatch 2）”后重试。
+                </div>
+              )}
 
               {results.report.sections.map((section, index) => (
                 <div key={section.id} className="rounded-xl border border-slate-200 bg-white p-5">
