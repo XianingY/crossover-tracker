@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { searchConnections, searchEvidence, identifyWorks } from '@/services/ai.service'
+import {
+  searchConnections,
+  searchEvidence,
+  identifyWorks,
+  generateCrossoverReport,
+} from '@/services/ai.service'
 import { prisma } from '@/lib/prisma'
 import { consumeRateLimit } from '@/lib/rate-limit'
 import { getOrSetCachedValue } from '@/lib/request-cache'
 import { captureApiException } from '@/lib/observability'
 import { normalizeAlias } from '@/lib/work-alias'
 
-const modeSchema = z.enum(['identify', 'connections', 'evidence'])
+const modeSchema = z.enum(['identify', 'connections', 'evidence', 'report'])
 
 interface ApiConnection {
   fromWork: string
@@ -48,7 +53,13 @@ interface EvidenceResponse {
   evidence: Awaited<ReturnType<typeof searchEvidence>>
 }
 
-type AiSearchResponse = IdentifyResponse | ConnectionsResponse | EvidenceResponse
+interface ReportResponse {
+  type: 'report'
+  query: string
+  report: Awaited<ReturnType<typeof generateCrossoverReport>>
+}
+
+type AiSearchResponse = IdentifyResponse | ConnectionsResponse | EvidenceResponse | ReportResponse
 
 function getClientIp(request: NextRequest): string {
   const forwardedFor = request.headers.get('x-forwarded-for')
@@ -61,6 +72,7 @@ function getClientIp(request: NextRequest): string {
 function getCacheTtlMs(mode: z.infer<typeof modeSchema>): number {
   if (mode === 'identify') return 60 * 1000
   if (mode === 'connections') return 90 * 1000
+  if (mode === 'report') return 5 * 60 * 1000
   return 120 * 1000
 }
 
@@ -110,7 +122,7 @@ export async function GET(request: NextRequest) {
   const workA = searchParams.get('workA')?.trim() || ''
   const workB = searchParams.get('workB')?.trim() || ''
 
-  if ((mode === 'identify' || mode === 'connections') && !query) {
+  if ((mode === 'identify' || mode === 'connections' || mode === 'report') && !query) {
     return NextResponse.json({ error: 'Missing query parameter: q' }, { status: 400 })
   }
 
@@ -122,7 +134,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Query is too long (max 120 characters)' }, { status: 400 })
   }
 
-  const cacheKey = `ai-search:v3:${mode}:${query.toLowerCase()}:${workA.toLowerCase()}:${workB.toLowerCase()}`
+  const cacheKey = `ai-search:v4:${mode}:${query.toLowerCase()}:${workA.toLowerCase()}:${workB.toLowerCase()}`
   const cacheTtlMs = getCacheTtlMs(mode)
 
   try {
@@ -255,6 +267,15 @@ export async function GET(request: NextRequest) {
               workA,
               workB,
               evidence,
+            }
+          }
+
+          case 'report': {
+            const report = await generateCrossoverReport(query)
+            return {
+              type: 'report',
+              query,
+              report,
             }
           }
         }

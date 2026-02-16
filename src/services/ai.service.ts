@@ -3,7 +3,6 @@
  * 
  * 使用 Tavily Search API
  */
-import { z } from 'zod'
 
 export interface SearchResult {
   title: string
@@ -15,6 +14,7 @@ export interface SearchResult {
 }
 
 export type SourceLevel = 'official' | 'trusted' | 'other'
+export type RelationType = 'adaptation' | 'spin_off' | 'crossover' | 'reference' | 'inspired'
 
 export interface ImageAnalysisResult {
   description: string
@@ -26,10 +26,9 @@ export interface ImageAnalysisResult {
 export interface WorkConnection {
   fromWork: string
   toWork: string
-  relationType: string
+  relationType: RelationType
   evidence: string
   evidenceUrl: string
-  confidence?: number
   fromImage?: string
   toImage?: string
   sourceName?: string
@@ -42,6 +41,45 @@ export interface WorkCandidate {
   source: string
   url: string
   imageUrl?: string
+}
+
+export interface ReportCitation {
+  title: string
+  url: string
+  snippet: string
+  sourceName: string
+  sourceLevel: SourceLevel
+}
+
+export interface ReportClaim {
+  id: string
+  category: string
+  targetWork: string
+  relationType: RelationType
+  summary: string
+  confidence: number
+  citations: ReportCitation[]
+}
+
+export interface ReportSection {
+  id: string
+  title: string
+  description: string
+  claims: ReportClaim[]
+}
+
+export interface WorkCrossoverReport {
+  workName: string
+  generatedAt: string
+  summary: string
+  sections: ReportSection[]
+  stats: {
+    claims: number
+    citations: number
+    official: number
+    trusted: number
+    other: number
+  }
 }
 
 function getTavilyApiKey(): string | undefined {
@@ -72,23 +110,6 @@ interface RankedSearchResult extends SearchResult {
   sourceName: string
   sourceLevel: SourceLevel
 }
-
-const relationTypeSchema = z.enum([
-  'adaptation',
-  'spin_off',
-  'crossover',
-  'reference',
-  'inspired',
-])
-
-const structuredConnectionSchema = z.object({
-  fromWork: z.string().min(1),
-  toWork: z.string().min(1),
-  relationType: relationTypeSchema,
-  evidence: z.string().min(1),
-  evidenceUrl: z.string().url(),
-  confidence: z.number().min(0).max(1),
-})
 
 const BLOCKED_DOMAIN_FRAGMENTS = [
   // Adult / NSFW
@@ -169,6 +190,7 @@ const OFFICIAL_DOMAIN_WHITELIST = [
   'aniplex.co.jp',
   'toei-anim.co.jp',
   'kadokawa.co.jp',
+  'tohoanimationstore.com',
 ]
 
 const TRUSTED_DOMAIN_WHITELIST = [
@@ -179,6 +201,9 @@ const TRUSTED_DOMAIN_WHITELIST = [
   'anilist.co',
   'anidb.net',
   'douban.com',
+  'ign.com',
+  'polygon.com',
+  'gamespot.com',
 ]
 
 const TAVILY_EXCLUDE_DOMAINS = [
@@ -205,6 +230,44 @@ const AUTHORITY_SOURCES = [
   { pattern: 'anidb.net', name: 'AniDB', priority: 12 },
   { pattern: 'bangumi.tv', name: 'Bangumi', priority: 14 },
   { pattern: 'anilist.co', name: 'AniList', priority: 12 },
+]
+
+interface ReportQueryConfig {
+  id: string
+  sectionTitle: string
+  sectionDescription: string
+  query: (workName: string) => string
+}
+
+const REPORT_QUERY_CONFIGS: ReportQueryConfig[] = [
+  {
+    id: 'comics-film',
+    sectionTitle: '美漫与影视联动',
+    sectionDescription: '包含漫画客串、电影宣传联动、超级英雄类官方合作。',
+    query: workName =>
+      `${workName} 漫威 DC 电影 宣传 联动 crossover collaboration official announcement`,
+  },
+  {
+    id: 'games',
+    sectionTitle: '电子游戏联动',
+    sectionDescription: '重点覆盖大型在线游戏、联动皮肤、活动公告与版本更新说明。',
+    query: workName =>
+      `${workName} 游戏 联动 collaboration game event skin official announcement`,
+  },
+  {
+    id: 'anime-merch',
+    sectionTitle: '动漫/品牌/周边联动',
+    sectionDescription: '包含动画、特摄、品牌周边、限定联名商品与官方商店信息。',
+    query: workName =>
+      `${workName} 联名 周边 collaboration merchandise official store anime crossover`,
+  },
+  {
+    id: 'sports-cross',
+    sectionTitle: '体育与跨界合作',
+    sectionDescription: '包含体育联盟、服饰品牌、线下活动等跨界合作场景。',
+    query: workName =>
+      `${workName} NBA sports collaboration apparel campaign official`,
+  },
 ]
 
 function normalizeHost(hostname: string): string {
@@ -375,6 +438,126 @@ function mergeSearchResults(primary: SearchResult[], secondary: SearchResult[]):
   return merged
 }
 
+function detectRelationType(text: string): RelationType {
+  const lower = text.toLowerCase()
+  if (
+    lower.includes('改编') ||
+    lower.includes('adaptation') ||
+    lower.includes('adapted from')
+  ) {
+    return 'adaptation'
+  }
+
+  if (lower.includes('衍生') || lower.includes('spin-off') || lower.includes('续作')) {
+    return 'spin_off'
+  }
+
+  if (lower.includes('参考') || lower.includes('reference')) {
+    return 'reference'
+  }
+
+  if (lower.includes('灵感') || lower.includes('inspired')) {
+    return 'inspired'
+  }
+
+  return 'crossover'
+}
+
+function stripQueryTerms(value: string, queryTerms: string[]): string {
+  let result = value
+  for (const term of queryTerms) {
+    if (!term) continue
+    result = result.replaceAll(term, ' ')
+  }
+  return result.replace(/\s+/g, ' ').trim()
+}
+
+function extractTargetFromTitleOrSnippet(value: string, queryTerms: string[]): string | null {
+  const noQueryText = stripQueryTerms(value, queryTerms)
+  const bracketMatch = noQueryText.match(/[《【\[]([^》】\]]+)[》】\]]/)
+  if (bracketMatch) {
+    return sanitizeExtractedWorkName(bracketMatch[1])
+  }
+
+  const titleHead = noQueryText.split(' - ')[0].split('|')[0].trim()
+  if (titleHead.length >= 2 && titleHead.length <= 40) {
+    const cleaned = sanitizeExtractedWorkName(titleHead)
+    if (cleaned) return cleaned
+  }
+
+  const pattern =
+    /([A-Za-z0-9\u4e00-\u9fa5][A-Za-z0-9\u4e00-\u9fa5\s:：'’\-]{1,40}(?:动画|漫画|电影|游戏|作品|series|anime|manga|movie|game)?)/g
+  const candidates = noQueryText.match(pattern) || []
+  for (const raw of candidates) {
+    const candidate = sanitizeExtractedWorkName(raw.replace(/(动画|漫画|电影|游戏|作品)$/u, '').trim())
+    if (!candidate) continue
+    if (candidate.length < 2 || candidate.length > 40) continue
+    return candidate
+  }
+
+  return null
+}
+
+function sanitizeExtractedWorkName(value: string): string | null {
+  const cleaned = value.replace(/[\[\]【】()（）]/g, '').replace(/\s+/g, ' ').trim()
+  if (!cleaned || cleaned.length < 2 || cleaned.length > 40) return null
+
+  const lowered = cleaned.toLowerCase()
+  const blocked = [
+    '维基百科',
+    '自由的百科全书',
+    '百科',
+    'official',
+    'press release',
+    'news',
+    'announcement',
+    '更新',
+    '活动',
+    '联动',
+  ]
+  if (blocked.some(keyword => lowered.includes(keyword))) {
+    return null
+  }
+
+  return cleaned
+}
+
+function scoreClaimConfidence(
+  sourceLevel: SourceLevel,
+  text: string,
+  relationType: RelationType,
+  targetWork: string,
+  workName: string
+): number {
+  let score = 0.35
+
+  if (sourceLevel === 'official') score += 0.35
+  else if (sourceLevel === 'trusted') score += 0.2
+
+  const lower = text.toLowerCase()
+  if (
+    lower.includes('联动') ||
+    lower.includes('collaboration') ||
+    lower.includes('crossover') ||
+    lower.includes('客串') ||
+    lower.includes('joint')
+  ) {
+    score += 0.2
+  }
+
+  if (/《[^》]+》/.test(text)) score += 0.1
+
+  if (relationType === 'reference' || relationType === 'inspired') {
+    score -= 0.05
+  }
+
+  if (normalizeForMatch(targetWork) === normalizeForMatch(workName)) {
+    score = 0
+  }
+
+  return Math.max(0, Math.min(1, score))
+}
+
 export async function searchWeb(query: string, options: SearchWebOptions = {}): Promise<SearchResult[]> {
   const preferOfficial = options.preferOfficial ?? false
   const officialOrTrustedOnly = options.officialOrTrustedOnly ?? false
@@ -392,7 +575,6 @@ export async function searchWeb(query: string, options: SearchWebOptions = {}): 
     ...options,
     includeDomains: OFFICIAL_DOMAIN_WHITELIST,
   })
-
   if (officialResults.length >= maxResults) {
     return officialResults.slice(0, maxResults)
   }
@@ -415,7 +597,7 @@ export async function searchWeb(query: string, options: SearchWebOptions = {}): 
   return mergeSearchResults(mergedTrusted, fallbackResults).slice(0, maxResults)
 }
 
-async function queryTavily(query: string, options: SearchWebOptions = {}): Promise<SearchResult[]> {
+async function queryTavily(query: string, options: SearchWebOptions): Promise<SearchResult[]> {
   const apiKey = getTavilyApiKey()
   if (!apiKey) {
     throw new Error('搜索服务未配置。请在 Vercel 后台配置 TAVILY_API_KEY')
@@ -454,54 +636,58 @@ async function queryTavily(query: string, options: SearchWebOptions = {}): Promi
       throw new Error(`Tavily API error: ${response.status}`)
     }
 
-    const data = (await response.json()) as TavilySearchResponse
-    if (!Array.isArray(data.results)) {
-      return []
+    const data = await response.json() as TavilySearchResponse
+
+    if (data.results && Array.isArray(data.results)) {
+      const rankedResults = data.results
+        .map((item): RankedSearchResult | null => {
+          const url = (item.url || '').trim()
+          const title = (item.title || '').trim()
+          const snippet = (item.content || item.snippet || '').trim()
+
+          if (!url) {
+            return null
+          }
+
+          if (isBlocked(url) || isContentBlocked(title, snippet) || isLowQualityContent(title, snippet)) {
+            return null
+          }
+
+          const sourceLevel = classifySourceLevel(url, title, snippet)
+          if (officialOrTrustedOnly && sourceLevel === 'other') {
+            return null
+          }
+
+          const sourceName = getSourceName(url)
+
+          return {
+            title,
+            url,
+            snippet,
+            imageUrl: item.images?.[0] || undefined,
+            sourceName,
+            sourceLevel,
+            priority: scoreSearchResult(url, sourceLevel, preferOfficial)
+          }
+        })
+        .filter((item): item is RankedSearchResult => item !== null)
+
+      const results = dedupeResults(rankedResults)
+        .sort((a, b) => b.priority - a.priority)
+        .slice(0, maxResults)
+        .map(result => ({
+          title: result.title,
+          url: result.url,
+          snippet: result.snippet,
+          imageUrl: result.imageUrl,
+          sourceName: result.sourceName,
+          sourceLevel: result.sourceLevel
+        }))
+
+      return results
     }
 
-    const rankedResults = data.results
-      .map((item): RankedSearchResult | null => {
-        const url = (item.url || '').trim()
-        const title = (item.title || '').trim()
-        const snippet = (item.content || item.snippet || '').trim()
-
-        if (!url) {
-          return null
-        }
-
-        if (isBlocked(url) || isContentBlocked(title, snippet) || isLowQualityContent(title, snippet)) {
-          return null
-        }
-
-        const sourceLevel = classifySourceLevel(url, title, snippet)
-        if (officialOrTrustedOnly && sourceLevel === 'other') {
-          return null
-        }
-
-        const sourceName = getSourceName(url)
-        return {
-          title,
-          url,
-          snippet,
-          imageUrl: item.images?.[0] || undefined,
-          sourceName,
-          sourceLevel,
-          priority: scoreSearchResult(url, sourceLevel, preferOfficial),
-        }
-      })
-      .filter((item): item is RankedSearchResult => item !== null)
-
-    return dedupeResults(rankedResults)
-      .sort((a, b) => b.priority - a.priority)
-      .slice(0, maxResults)
-      .map(result => ({
-        title: result.title,
-        url: result.url,
-        snippet: result.snippet,
-        imageUrl: result.imageUrl,
-        sourceName: result.sourceName,
-        sourceLevel: result.sourceLevel,
-      }))
+    return []
   } catch (error) {
     console.error('Tavily search error:', error)
     throw new Error('搜索失败，请稍后重试')
@@ -598,6 +784,178 @@ export async function identifyWorks(query: string): Promise<WorkCandidate[]> {
   }
 
   return candidates
+}
+
+export async function generateCrossoverReport(workName: string): Promise<WorkCrossoverReport> {
+  const trimmedWorkName = workName.trim()
+  if (!trimmedWorkName) {
+    throw new Error('workName is required')
+  }
+
+  const sectionResults = await Promise.all(
+    REPORT_QUERY_CONFIGS.map(async config => {
+      const strict = await searchWeb(config.query(trimmedWorkName), {
+        preferOfficial: true,
+        officialOrTrustedOnly: true,
+        maxResults: 12,
+      })
+
+      let merged = strict
+      if (strict.length < 6) {
+        const fallback = await searchWeb(config.query(trimmedWorkName), {
+          preferOfficial: true,
+          maxResults: 14,
+        })
+        merged = mergeSearchResults(strict, fallback)
+      }
+
+      return { config, results: merged }
+    })
+  )
+
+  const sections: ReportSection[] = sectionResults
+    .map(({ config, results }) => {
+      const claims = buildSectionClaims(trimmedWorkName, config, results)
+      return {
+        id: config.id,
+        title: config.sectionTitle,
+        description: config.sectionDescription,
+        claims,
+      }
+    })
+    .filter(section => section.claims.length > 0)
+
+  const stats = computeReportStats(sections)
+  const summary = buildReportSummary(trimmedWorkName, sections, stats)
+
+  return {
+    workName: trimmedWorkName,
+    generatedAt: new Date().toISOString(),
+    summary,
+    sections,
+    stats,
+  }
+}
+
+function buildSectionClaims(
+  workName: string,
+  config: ReportQueryConfig,
+  results: SearchResult[]
+): ReportClaim[] {
+  const claimMap = new Map<string, ReportClaim>()
+  const queryTerms = [workName]
+
+  for (const result of results) {
+    const text = `${result.title} ${result.snippet}`.trim()
+    const targetWork = extractTargetFromTitleOrSnippet(text, queryTerms)
+    if (!targetWork) {
+      continue
+    }
+
+    const relationType = detectRelationType(text)
+    const confidence = scoreClaimConfidence(
+      result.sourceLevel || 'other',
+      text,
+      relationType,
+      targetWork,
+      workName
+    )
+    if (confidence < 0.45) {
+      continue
+    }
+
+    const summary = (result.snippet || result.title || result.url).trim().slice(0, 220)
+    const claimKey = `${config.id}:${normalizeForMatch(targetWork)}:${relationType}`
+    const citation: ReportCitation = {
+      title: result.title || targetWork,
+      url: result.url,
+      snippet: result.snippet || result.title || result.url,
+      sourceName: result.sourceName || getSourceName(result.url),
+      sourceLevel: result.sourceLevel || 'other',
+    }
+
+    const existing = claimMap.get(claimKey)
+    if (!existing) {
+      claimMap.set(claimKey, {
+        id: claimKey,
+        category: config.id,
+        targetWork,
+        relationType,
+        summary,
+        confidence,
+        citations: [citation],
+      })
+      continue
+    }
+
+    existing.confidence = Math.max(existing.confidence, confidence)
+    if (summary.length > existing.summary.length) {
+      existing.summary = summary
+    }
+    if (!existing.citations.some(item => item.url.toLowerCase() === citation.url.toLowerCase())) {
+      existing.citations.push(citation)
+    }
+  }
+
+  return Array.from(claimMap.values())
+    .filter(claim => {
+      const hasOfficialOrTrusted = claim.citations.some(
+        citation => citation.sourceLevel === 'official' || citation.sourceLevel === 'trusted'
+      )
+      return hasOfficialOrTrusted
+    })
+    .map(claim => ({
+      ...claim,
+      citations: claim.citations
+        .sort((a, b) => sourceLevelWeight(b.sourceLevel) - sourceLevelWeight(a.sourceLevel))
+        .slice(0, 3),
+    }))
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, 8)
+}
+
+function sourceLevelWeight(level: SourceLevel): number {
+  if (level === 'official') return 3
+  if (level === 'trusted') return 2
+  return 1
+}
+
+function computeReportStats(sections: ReportSection[]): WorkCrossoverReport['stats'] {
+  let citations = 0
+  let official = 0
+  let trusted = 0
+  let other = 0
+
+  for (const section of sections) {
+    for (const claim of section.claims) {
+      citations += claim.citations.length
+      for (const citation of claim.citations) {
+        if (citation.sourceLevel === 'official') official += 1
+        else if (citation.sourceLevel === 'trusted') trusted += 1
+        else other += 1
+      }
+    }
+  }
+
+  return {
+    claims: sections.reduce((sum, section) => sum + section.claims.length, 0),
+    citations,
+    official,
+    trusted,
+    other,
+  }
+}
+
+function buildReportSummary(
+  workName: string,
+  sections: ReportSection[],
+  stats: WorkCrossoverReport['stats']
+): string {
+  if (sections.length === 0 || stats.claims === 0) {
+    return `暂未检索到关于《${workName}》的高可信联动证据，请尝试更具体的关键词（例如英文名、别名或具体联动对象）。`
+  }
+
+  return `围绕《${workName}》共识别到 ${stats.claims} 条联动 claim（${stats.citations} 条证据）。其中官方来源 ${stats.official} 条，权威来源 ${stats.trusted} 条。`
 }
 
 function extractWorkInfo(
@@ -703,113 +1061,35 @@ function extractWorkInfo(
 }
 
 function extractConnectionInfo(workName: string, result: SearchResult): WorkConnection | null {
-  const text = `${result.title} ${result.snippet}`
-  const lowerText = text.toLowerCase()
+  const text = result.title + ' ' + result.snippet
 
-  let relationType: z.infer<typeof relationTypeSchema> = 'crossover'
-  if (lowerText.includes('改编') || lowerText.includes('adaptation')) {
-    relationType = 'adaptation'
-  } else if (lowerText.includes('衍生') || lowerText.includes('spin-off') || lowerText.includes('续作')) {
-    relationType = 'spin_off'
-  } else if (lowerText.includes('参考') || lowerText.includes('reference')) {
-    relationType = 'reference'
-  } else if (lowerText.includes('灵感') || lowerText.includes('inspired')) {
-    relationType = 'inspired'
-  }
+  const relationType = detectRelationType(text)
 
   const targetWork = extractTargetWork(text, workName)
-  if (!targetWork || normalizeForMatch(targetWork) === normalizeForMatch(workName)) {
-    return null
-  }
+  if (!targetWork) return null
 
-  const confidence = scoreConnectionConfidence(text, result.sourceLevel || 'other', relationType)
-  if (confidence < 0.35) {
-    return null
-  }
-
-  const parsed = structuredConnectionSchema.safeParse({
+  return {
     fromWork: workName,
     toWork: targetWork,
     relationType,
-    evidence: (result.snippet || result.title || result.url).slice(0, 500),
+    evidence: result.snippet || result.url,
     evidenceUrl: result.url,
-    confidence,
-  })
-
-  if (!parsed.success) {
-    return null
-  }
-
-  return {
-    ...parsed.data,
     fromImage: result.imageUrl,
     sourceName: result.sourceName,
-    sourceLevel: result.sourceLevel,
+    sourceLevel: result.sourceLevel
   }
-}
-
-function scoreConnectionConfidence(
-  text: string,
-  sourceLevel: SourceLevel,
-  relationType: z.infer<typeof relationTypeSchema>
-): number {
-  let score = 0.35
-  const lowerText = text.toLowerCase()
-
-  if (sourceLevel === 'official') {
-    score += 0.35
-  } else if (sourceLevel === 'trusted') {
-    score += 0.2
-  }
-
-  if (/《[^》]+》/.test(text)) {
-    score += 0.15
-  }
-
-  if (
-    lowerText.includes('联动') ||
-    lowerText.includes('crossover') ||
-    lowerText.includes('合作') ||
-    lowerText.includes('改编') ||
-    lowerText.includes('衍生')
-  ) {
-    score += 0.2
-  }
-
-  if (relationType === 'reference' || relationType === 'inspired') {
-    score -= 0.05
-  }
-
-  return Math.max(0, Math.min(1, score))
 }
 
 function extractTargetWork(text: string, sourceWork: string): string | null {
   const cleaned = text.replaceAll(sourceWork, '').trim()
 
   const match = cleaned.match(/[《]([^》]+)[》]/)
-  if (match) {
-    return sanitizeExtractedWorkName(match[1])
-  }
+  if (match) return sanitizeExtractedWorkName(match[1])
 
   const nameMatch = cleaned.match(/([A-Za-z0-9\u4e00-\u9fa5]{2,20}(?:作品|漫画|动画|小说|游戏|电影|剧))/g)
   if (nameMatch && nameMatch.length > 0) {
-    const normalized = nameMatch[0].replace(/(作品|漫画|动画|小说|游戏|电影|剧)$/, '')
-    return sanitizeExtractedWorkName(normalized)
+    return sanitizeExtractedWorkName(nameMatch[0].replace(/(作品|漫画|动画|小说|游戏|电影|剧)$/, ''))
   }
 
   return null
-}
-
-function sanitizeExtractedWorkName(value: string): string | null {
-  const cleaned = value.replace(/[\[\]【】()（）]/g, '').trim()
-  if (!cleaned) return null
-  if (cleaned.length < 2 || cleaned.length > 40) return null
-
-  const lowered = cleaned.toLowerCase()
-  const blocked = ['维基百科', '自由的百科全书', '百科', 'official', 'news', 'press release']
-  if (blocked.some(keyword => lowered.includes(keyword))) {
-    return null
-  }
-
-  return cleaned
 }

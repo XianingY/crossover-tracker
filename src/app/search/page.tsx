@@ -17,6 +17,45 @@ interface WorkConnection {
   sourceLevel?: 'official' | 'trusted' | 'other'
 }
 
+interface ReportCitation {
+  title: string
+  url: string
+  snippet: string
+  sourceName: string
+  sourceLevel: 'official' | 'trusted' | 'other'
+}
+
+interface ReportClaim {
+  id: string
+  category: string
+  targetWork: string
+  relationType: 'adaptation' | 'spin_off' | 'crossover' | 'reference' | 'inspired'
+  summary: string
+  confidence: number
+  citations: ReportCitation[]
+}
+
+interface ReportSection {
+  id: string
+  title: string
+  description: string
+  claims: ReportClaim[]
+}
+
+interface WorkCrossoverReport {
+  workName: string
+  generatedAt: string
+  summary: string
+  sections: ReportSection[]
+  stats: {
+    claims: number
+    citations: number
+    official: number
+    trusted: number
+    other: number
+  }
+}
+
 interface Work {
   id: string
   title: string
@@ -32,11 +71,12 @@ interface WorkCandidate {
 }
 
 interface SearchResults {
-  type?: 'identify' | 'image'
+  type?: 'identify' | 'image' | 'report'
   query?: string
   workCandidates?: WorkCandidate[]
   foundInDb?: Work[]
   connections?: WorkConnection[]
+  report?: WorkCrossoverReport
   imageAnalysis?: {
     description: string
     workName?: string
@@ -101,6 +141,37 @@ export default function SearchPage() {
       setLoading(false)
     }
   }, [])
+
+  const handleGenerateReport = useCallback(async (workName?: string) => {
+    const target = (workName || selectedWork?.name || query).trim()
+    if (!target) return
+
+    setLoading(true)
+    setError('')
+    try {
+      const res = await fetch(`/api/ai/search?q=${encodeURIComponent(target)}&mode=report`)
+      const data = await res.json() as SearchResults & { error?: string }
+
+      if (!res.ok) {
+        throw new Error(data.error || '生成报告失败')
+      }
+
+      setResults(data)
+      if (workName) {
+        setSelectedWork({
+          name: workName,
+          type: selectedWork?.type || '未知',
+          source: selectedWork?.source || 'AI报告',
+          url: selectedWork?.url || '',
+          imageUrl: selectedWork?.imageUrl,
+        })
+      }
+    } catch (err) {
+      setError(getErrorMessage(err, '生成报告失败'))
+    } finally {
+      setLoading(false)
+    }
+  }, [query, selectedWork])
 
   const handleImageAnalysis = useCallback(async (imageUrl: string) => {
     setLoading(true)
@@ -243,6 +314,13 @@ export default function SearchPage() {
             className="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
             {loading ? '搜索中...' : '搜索'}
+          </button>
+          <button
+            onClick={() => handleGenerateReport()}
+            disabled={loading}
+            className="px-5 py-3 bg-slate-800 text-white font-medium rounded-lg hover:bg-slate-900 disabled:opacity-50 transition-colors"
+          >
+            {loading ? '分析中...' : '深度报告'}
           </button>
         </div>
       )}
@@ -405,6 +483,82 @@ export default function SearchPage() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {results.type === 'report' && results.report && (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-slate-200 bg-white p-5">
+                <h2 className="text-xl font-semibold text-slate-800">
+                  《{results.report.workName}》联动深度报告
+                </h2>
+                <p className="mt-2 text-sm text-slate-600">{results.report.summary}</p>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                  <span className="rounded bg-indigo-100 px-2 py-1 text-indigo-700">
+                    Claims {results.report.stats.claims}
+                  </span>
+                  <span className="rounded bg-slate-100 px-2 py-1 text-slate-700">
+                    引用 {results.report.stats.citations}
+                  </span>
+                  <span className="rounded bg-emerald-100 px-2 py-1 text-emerald-700">
+                    官方 {results.report.stats.official}
+                  </span>
+                  <span className="rounded bg-blue-100 px-2 py-1 text-blue-700">
+                    权威 {results.report.stats.trusted}
+                  </span>
+                </div>
+              </div>
+
+              {results.report.sections.map((section, index) => (
+                <div key={section.id} className="rounded-xl border border-slate-200 bg-white p-5">
+                  <h3 className="text-lg font-semibold text-slate-800">
+                    {index + 1}. {section.title}
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">{section.description}</p>
+
+                  <div className="mt-4 space-y-4">
+                    {section.claims.map((claim, claimIndex) => (
+                      <div key={claim.id} className="rounded-lg border border-slate-100 bg-slate-50 p-4">
+                        <div className="mb-2 flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-semibold text-slate-800">
+                            {index + 1}.{claimIndex + 1} {claim.targetWork}
+                          </span>
+                          <span className="rounded bg-purple-100 px-2 py-0.5 text-xs text-purple-700">
+                            {claim.relationType === 'adaptation' && '改编'}
+                            {claim.relationType === 'spin_off' && '衍生'}
+                            {claim.relationType === 'crossover' && '联动'}
+                            {claim.relationType === 'reference' && '参考'}
+                            {claim.relationType === 'inspired' && '灵感'}
+                          </span>
+                          <span className="rounded bg-slate-200 px-2 py-0.5 text-xs text-slate-700">
+                            置信度 {(claim.confidence * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-600">{claim.summary}</p>
+                        <div className="mt-3 space-y-2">
+                          {claim.citations.map((citation, citationIndex) => (
+                            <div key={`${claim.id}-${citationIndex}`} className="text-sm">
+                              <a
+                                href={citation.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-medium text-indigo-600 hover:underline"
+                              >
+                                [{citationIndex + 1}] {citation.title || citation.sourceName}
+                              </a>
+                              <span className="ml-2 text-xs text-slate-500">
+                                {citation.sourceName}
+                                {citation.sourceLevel === 'official' && '（官方）'}
+                                {citation.sourceLevel === 'trusted' && '（权威）'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
