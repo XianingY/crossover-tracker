@@ -18,6 +18,7 @@ interface WorkConnection {
   evidenceUrl: string
   fromImage?: string
   toImage?: string
+  source?: 'db' | 'ai'
 }
 
 interface Work {
@@ -184,21 +185,19 @@ export default function SearchPage() {
       <div className="flex gap-2 mb-6">
         <button
           onClick={() => setMode('text')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            mode === 'text'
-              ? 'bg-blue-600 text-white'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-          }`}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${mode === 'text'
+            ? 'bg-blue-600 text-white'
+            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
         >
           文本搜索
         </button>
         <button
           onClick={() => setMode('image')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-            mode === 'image'
-              ? 'bg-blue-600 text-white'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-          }`}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${mode === 'image'
+            ? 'bg-blue-600 text-white'
+            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
         >
           图片搜索
         </button>
@@ -255,16 +254,15 @@ export default function SearchPage() {
                   <button
                     key={i}
                     onClick={() => handleWorkSelect(work)}
-                    className={`w-full text-left p-4 rounded-lg border transition-all ${
-                      selectedWork?.name === work.name
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-slate-200 bg-white hover:border-blue-300 hover:shadow-sm'
-                    }`}
+                    className={`w-full text-left p-4 rounded-lg border transition-all ${selectedWork?.name === work.name
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-slate-200 bg-white hover:border-blue-300 hover:shadow-sm'
+                      }`}
                   >
                     <div className="flex gap-4">
                       {work.imageUrl && (
-                        <img 
-                          src={work.imageUrl} 
+                        <img
+                          src={work.imageUrl}
                           alt={work.name}
                           className="w-20 h-20 object-cover rounded-lg shrink-0"
                         />
@@ -316,8 +314,8 @@ export default function SearchPage() {
                   >
                     <div className="flex gap-4 items-start mb-3">
                       {conn.fromImage && (
-                        <img 
-                          src={conn.fromImage} 
+                        <img
+                          src={conn.fromImage}
                           alt={conn.fromWork}
                           className="w-16 h-16 object-cover rounded-lg shrink-0"
                         />
@@ -330,11 +328,19 @@ export default function SearchPage() {
                           <span className="text-slate-400">⟷</span>
                           <span className="font-medium text-slate-800">{conn.toWork}</span>
                           <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded">
-                            {conn.relationType === 'adaptation' ? '改编' : 
-                             conn.relationType === 'spin_off' ? '衍生' :
-                             conn.relationType === 'crossover' ? '联动' :
-                             conn.relationType === 'reference' ? '参考' : '灵感'}
+                            {conn.relationType === 'adaptation' ? '改编' :
+                              conn.relationType === 'spin_off' ? '衍生' :
+                                conn.relationType === 'crossover' ? '联动' :
+                                  conn.relationType === 'reference' ? '参考' : '灵感'}
                           </span>
+                          {conn.source && (
+                            <span className={`px-2 py-0.5 text-xs rounded ${conn.source === 'db'
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-blue-100 text-blue-700'
+                              }`}>
+                              {conn.source === 'db' ? '数据库' : 'AI搜索'}
+                            </span>
+                          )}
                         </div>
                         {conn.evidence && (
                           <p className="text-sm text-slate-500 line-clamp-2">{conn.evidence}</p>

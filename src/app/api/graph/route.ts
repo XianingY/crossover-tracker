@@ -34,10 +34,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ nodes: [], links: [] })
   }
 
-  // BFS to build graph
+  // BFS to build graph (bidirectional)
   const nodes = new Map<string, GraphNode>()
   const links: GraphLink[] = []
   const visited = new Set<string>()
+  const linkSet = new Set<string>() // prevent duplicate links
   const queue: { id: string; level: number }[] = []
 
   // Add central node
@@ -61,20 +62,37 @@ export async function GET(request: NextRequest) {
     if (level >= MAX_LEVEL) continue
 
     // Find all outgoing connections from this node
-    const connections = await prisma.connection.findMany({
-      where: {
-        fromWorkId: id,
-      },
+    const outgoing = await prisma.connection.findMany({
+      where: { fromWorkId: id },
       include: {
         toWork: true,
-        evidences: {
-          select: { status: true }
-        }
+        evidences: { select: { status: true } }
       }
     })
 
-    for (const conn of connections) {
-      // Add node if not visited
+    // Find all incoming connections to this node
+    const incoming = await prisma.connection.findMany({
+      where: { toWorkId: id },
+      include: {
+        fromWork: true,
+        evidences: { select: { status: true } }
+      }
+    })
+
+    for (const conn of outgoing) {
+      const linkKey = `${conn.fromWorkId}-${conn.toWorkId}`
+      if (!linkSet.has(linkKey)) {
+        linkSet.add(linkKey)
+        const isUnreviewed = conn.evidences.length === 0 || conn.evidences.some((e) => e.status === 'PENDING')
+        links.push({
+          source: conn.fromWorkId,
+          target: conn.toWorkId,
+          relationType: conn.relationType,
+          level: level + 1,
+          isUnreviewed
+        })
+      }
+
       if (!visited.has(conn.toWorkId)) {
         visited.add(conn.toWorkId)
         nodes.set(conn.toWorkId, {
@@ -86,20 +104,35 @@ export async function GET(request: NextRequest) {
           level: level + 1
         })
         queue.push({ id: conn.toWorkId, level: level + 1 })
-      } else {
-        // If visited, we update level if we found a shorter path (BFS guarantees shortest path first, but for general graph completeness)
-        // Actually BFS guarantees finding node at shortest path first, so we don't need to update level.
+      }
+    }
+
+    for (const conn of incoming) {
+      const linkKey = `${conn.fromWorkId}-${conn.toWorkId}`
+      if (!linkSet.has(linkKey)) {
+        linkSet.add(linkKey)
+        const isUnreviewed = conn.evidences.length === 0 || conn.evidences.some((e) => e.status === 'PENDING')
+        links.push({
+          source: conn.fromWorkId,
+          target: conn.toWorkId,
+          relationType: conn.relationType,
+          level: level + 1,
+          isUnreviewed
+        })
       }
 
-      // Add link
-      const isUnreviewed = conn.evidences.length === 0 || conn.evidences.some((e) => e.status === 'PENDING')
-      links.push({
-        source: conn.fromWorkId,
-        target: conn.toWorkId,
-        relationType: conn.relationType,
-        level: level + 1,
-        isUnreviewed
-      })
+      if (!visited.has(conn.fromWorkId)) {
+        visited.add(conn.fromWorkId)
+        nodes.set(conn.fromWorkId, {
+          id: conn.fromWork.id,
+          title: conn.fromWork.title,
+          type: conn.fromWork.type,
+          isCentral: conn.fromWork.isCentral,
+          coverUrl: conn.fromWork.coverUrl,
+          level: level + 1
+        })
+        queue.push({ id: conn.fromWorkId, level: level + 1 })
+      }
     }
   }
 

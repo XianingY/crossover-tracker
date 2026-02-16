@@ -4,22 +4,24 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { Card } from '@/components/ui/Card'
-import { Select } from '@/components/ui/Select'
+import { Combobox } from '@/components/ui/Combobox'
 import type { GraphNode } from '@/components/GraphView'
 
 const GraphView = dynamic(() => import('@/components/GraphView').then((m) => m.GraphView), {
   ssr: false,
 })
 
-interface CentralWork {
+interface WorkItem {
   id: string
   title: string
+  type: string
+  isCentral?: boolean
 }
 
 export default function HomePage() {
-  const [centralWorks, setCentralWorks] = useState<CentralWork[]>([])
+  const [allWorks, setAllWorks] = useState<WorkItem[]>([])
   const [centralWorkId, setCentralWorkId] = useState<string>('')
-  const [centralLoading, setCentralLoading] = useState(true)
+  const [worksLoading, setWorksLoading] = useState(true)
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
   const [selectedNodeDetail, setSelectedNodeDetail] = useState<{
     id: string
@@ -34,18 +36,19 @@ export default function HomePage() {
   const [panelLoading, setPanelLoading] = useState(false)
 
   useEffect(() => {
-    // 获取所有中心作品
-    fetch('/api/works/central')
+    // 获取所有作品
+    fetch('/api/works')
       .then(res => res.json())
-      .then((data: CentralWork[]) => {
+      .then((data: WorkItem[]) => {
         if (Array.isArray(data) && data.length > 0) {
-          setCentralWorks(data)
-          // 默认选中第一个
-          setCentralWorkId(data[0].id)
+          setAllWorks(data)
+          // 默认选中第一个 isCentral 作品，否则选第一个
+          const central = data.find(w => w.isCentral)
+          setCentralWorkId(central ? central.id : data[0].id)
         }
       })
       .catch(console.error)
-      .finally(() => setCentralLoading(false))
+      .finally(() => setWorksLoading(false))
   }, [])
 
   useEffect(() => {
@@ -92,6 +95,12 @@ export default function HomePage() {
     setPanelLoading(true)
   }
 
+  const handleSetAsCenter = (workId: string) => {
+    setCentralWorkId(workId)
+    setSelectedNode(null)
+    setSelectedNodeDetail(null)
+  }
+
   return (
     <main className="mx-auto max-w-7xl px-4 py-8 md:px-8">
       <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -115,23 +124,23 @@ export default function HomePage() {
         </div>
       </header>
 
-      {centralLoading ? (
+      {worksLoading ? (
         <Card className="border-dashed border-slate-300 bg-white/80 text-center">
           <div className="py-20">
             <h2 className="text-2xl font-semibold text-slate-800">加载中...</h2>
-            <p className="mx-auto mt-2 max-w-md text-slate-600">正在加载中心作品与图谱数据。</p>
+            <p className="mx-auto mt-2 max-w-md text-slate-600">正在加载作品与图谱数据。</p>
           </div>
         </Card>
-      ) : centralWorks.length === 0 ? (
+      ) : allWorks.length === 0 ? (
         <Card className="border-dashed border-slate-300 bg-white/80 text-center">
           <div className="py-20">
-            <h2 className="text-2xl font-semibold text-slate-800">还没有中心作品</h2>
+            <h2 className="text-2xl font-semibold text-slate-800">还没有作品</h2>
             <p className="mx-auto mt-2 max-w-md text-slate-600">
-              先创建一个中心作品，系统将基于它自动计算联动层级并生成关系图。
+              先创建一个作品，系统将基于它自动计算联动层级并生成关系图。
             </p>
             <div className="mt-6">
-              <Link href="/works/new?central=true" className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-6 py-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
-                创建中心作品
+              <Link href="/works/new" className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-6 py-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                创建作品
               </Link>
             </div>
           </div>
@@ -140,16 +149,15 @@ export default function HomePage() {
         <section className="space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-4">
-              <h2 className="text-lg font-semibold text-slate-900">联动网络</h2>
-              {centralWorks.length > 1 && (
-                <div className="w-56">
-                  <Select
-                    value={centralWorkId}
-                    onChange={(e) => setCentralWorkId(e.target.value)}
-                    options={centralWorks.map(w => ({ value: w.id, label: w.title }))}
-                  />
-                </div>
-              )}
+              <h2 className="text-lg font-semibold text-slate-900 shrink-0">联动网络</h2>
+              <div className="w-64">
+                <Combobox
+                  options={allWorks.map(w => ({ value: w.id, label: w.title }))}
+                  value={centralWorkId}
+                  onChange={(val) => val && setCentralWorkId(val)}
+                  placeholder="搜索作品..."
+                />
+              </div>
             </div>
             <p className="text-xs text-slate-500">点击节点可在右侧查看详情，按 Esc 可关闭侧栏</p>
           </div>
@@ -215,12 +223,23 @@ export default function HomePage() {
                     </>
                   )}
 
-                  <Link
-                    href={`/works/${selectedNode.id}`}
-                    className="inline-flex w-full items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
-                  >
-                    打开完整详情页
-                  </Link>
+                  <div className="flex flex-col gap-2">
+                    {selectedNode.id !== centralWorkId && (
+                      <button
+                        type="button"
+                        onClick={() => handleSetAsCenter(selectedNode.id)}
+                        className="inline-flex w-full items-center justify-center rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-medium text-indigo-700 shadow-sm transition-colors hover:bg-indigo-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                      >
+                        以此为中心
+                      </button>
+                    )}
+                    <Link
+                      href={`/works/${selectedNode.id}`}
+                      className="inline-flex w-full items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                    >
+                      打开完整详情页
+                    </Link>
+                  </div>
                 </div>
               )}
             </Card>

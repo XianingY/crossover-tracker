@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     switch (mode) {
       case 'identify': {
         const workCandidates = await identifyWorks(query)
-        
+
         const foundInDb = await prisma.work.findMany({
           where: {
             title: { contains: query, mode: 'insensitive' }
@@ -31,8 +31,60 @@ export async function GET(request: NextRequest) {
       }
 
       case 'connections': {
-        const connections = await searchConnections(query)
-        return NextResponse.json({ type: 'connections', query, connections })
+        // First, check the local database for existing connections
+        const dbConnections: any[] = []
+        const dbWorks = await prisma.work.findMany({
+          where: { title: { contains: query, mode: 'insensitive' } },
+          include: {
+            connectionsFrom: {
+              include: { toWork: true }
+            },
+            connectionsTo: {
+              include: { fromWork: true }
+            }
+          }
+        })
+
+        for (const work of dbWorks) {
+          for (const conn of work.connectionsFrom) {
+            dbConnections.push({
+              fromWork: work.title,
+              toWork: conn.toWork.title,
+              relationType: conn.relationType,
+              evidence: conn.description || '数据库已有记录',
+              evidenceUrl: '',
+              source: 'db'
+            })
+          }
+          for (const conn of work.connectionsTo) {
+            dbConnections.push({
+              fromWork: conn.fromWork.title,
+              toWork: work.title,
+              relationType: conn.relationType,
+              evidence: conn.description || '数据库已有记录',
+              evidenceUrl: '',
+              source: 'db'
+            })
+          }
+        }
+
+        // Then search the web for more connections
+        const aiConnections = await searchConnections(query)
+        const aiWithSource = aiConnections.map(c => ({ ...c, source: 'ai' }))
+
+        // Merge and deduplicate by target work name
+        const seen = new Set<string>()
+        const merged = []
+        for (const conn of [...dbConnections, ...aiWithSource]) {
+          const key = `${conn.fromWork}-${conn.toWork}`.toLowerCase()
+          const reverseKey = `${conn.toWork}-${conn.fromWork}`.toLowerCase()
+          if (!seen.has(key) && !seen.has(reverseKey)) {
+            seen.add(key)
+            merged.push(conn)
+          }
+        }
+
+        return NextResponse.json({ type: 'connections', query, connections: merged })
       }
 
       case 'evidence': {
