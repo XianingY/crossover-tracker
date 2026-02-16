@@ -19,6 +19,7 @@ interface CentralWork {
 export default function HomePage() {
   const [centralWorks, setCentralWorks] = useState<CentralWork[]>([])
   const [centralWorkId, setCentralWorkId] = useState<string>('')
+  const [centralLoading, setCentralLoading] = useState(true)
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
   const [selectedNodeDetail, setSelectedNodeDetail] = useState<{
     id: string
@@ -44,6 +45,7 @@ export default function HomePage() {
         }
       })
       .catch(console.error)
+      .finally(() => setCentralLoading(false))
   }, [])
 
   useEffect(() => {
@@ -107,10 +109,20 @@ export default function HomePage() {
           <Link href="/works" className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
             作品列表
           </Link>
+          <Link href="/admin/evidences" className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+            证据审核
+          </Link>
         </div>
       </header>
 
-      {centralWorks.length === 0 ? (
+      {centralLoading ? (
+        <Card className="border-dashed border-slate-300 bg-white/80 text-center">
+          <div className="py-20">
+            <h2 className="text-2xl font-semibold text-slate-800">加载中...</h2>
+            <p className="mx-auto mt-2 max-w-md text-slate-600">正在加载中心作品与图谱数据。</p>
+          </div>
+        </Card>
+      ) : centralWorks.length === 0 ? (
         <Card className="border-dashed border-slate-300 bg-white/80 text-center">
           <div className="py-20">
             <h2 className="text-2xl font-semibold text-slate-800">还没有中心作品</h2>

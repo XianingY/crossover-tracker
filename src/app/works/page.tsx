@@ -32,16 +32,18 @@ export default function WorksPage() {
   const [works, setWorks] = useState<Work[]>([])
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
+  const [loading, setLoading] = useState(true)
   
   useEffect(() => {
     const params = new URLSearchParams()
     if (search) params.set('search', search)
     if (typeFilter) params.set('type', typeFilter)
-    
+
     fetch(`/api/works?${params}`)
       .then(res => res.json())
       .then(setWorks)
       .catch(console.error)
+      .finally(() => setLoading(false))
   }, [search, typeFilter])
   
   const handleDelete = async (id: string) => {
@@ -101,6 +103,9 @@ export default function WorksPage() {
         </div>
       </Card>
 
+      {loading ? (
+        <Card className="bg-white/90 py-12 text-center text-slate-600">加载中...</Card>
+      ) : (
       <div className="grid gap-4">
         {works.map(work => (
           <Card
@@ -151,8 +156,9 @@ export default function WorksPage() {
           </Card>
         ))}
       </div>
+      )}
 
-      {works.length === 0 && (
+      {!loading && works.length === 0 && (
         <Card className="mt-4 border-dashed border-slate-300 bg-white/80 py-12 text-center">
           <h3 className="text-lg font-semibold text-slate-800">暂无作品</h3>
           <p className="mt-1 text-sm text-slate-600">先创建第一部作品，开始构建联动网络。</p>

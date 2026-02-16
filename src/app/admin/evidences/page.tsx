@@ -21,15 +21,17 @@ interface Evidence {
 export default function EvidencesAdminPage() {
   const [evidences, setEvidences] = useState<Evidence[]>([])
   const [filter, setFilter] = useState('')
+  const [loading, setLoading] = useState(true)
   
   useEffect(() => {
     const params = new URLSearchParams()
     if (filter) params.set('status', filter)
-    
+
     fetch(`/api/evidences?${params}`)
       .then(res => res.json())
       .then(setEvidences)
       .catch(console.error)
+      .finally(() => setLoading(false))
   }, [filter])
   
   const handleReview = async (id: string, status: 'APPROVED' | 'REJECTED', reason?: string) => {
@@ -76,7 +78,11 @@ export default function EvidencesAdminPage() {
       </div>
       
       <div className="grid gap-4">
-        {evidences.map(evidence => (
+        {loading && (
+          <Card className="bg-white/90 py-12 text-center text-slate-600">加载中...</Card>
+        )}
+
+        {!loading && evidences.map(evidence => (
           <Card key={evidence.id} className="bg-white/95 p-5">
             <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -139,7 +145,7 @@ export default function EvidencesAdminPage() {
           </Card>
         ))}
         
-        {evidences.length === 0 && (
+        {!loading && evidences.length === 0 && (
           <Card className="border-dashed border-slate-300 bg-white/80 py-12 text-center">
             <h3 className="text-lg font-semibold text-slate-800">暂无证据</h3>
             <p className="mt-1 text-sm text-slate-600">当前筛选条件下没有可审核条目。</p>

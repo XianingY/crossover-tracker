@@ -35,10 +35,13 @@ interface GraphViewProps {
 type GraphNodeObject = NodeObject & {
   id?: string
   level?: number
+  x?: number
+  y?: number
 }
 
 export function GraphView({ centralWorkId, onNodeSelect, selectedNodeId }: GraphViewProps) {
   const [data, setData] = useState<GraphData>({ nodes: [], links: [] })
+  const [loading, setLoading] = useState(true)
   const [dimensions, setDimensions] = useState({ width: 800, height: 640 })
   const containerRef = useRef<HTMLDivElement>(null)
   const fgRef = useRef<ForceGraphMethods<GraphNodeObject, GraphLink> | undefined>(undefined)
@@ -46,17 +49,22 @@ export function GraphView({ centralWorkId, onNodeSelect, selectedNodeId }: Graph
   // 加载图谱数据
   useEffect(() => {
     async function fetchGraphData() {
+      setLoading(true)
       try {
         const response = await fetch(`/api/graph?centralId=${centralWorkId}`)
         const graphData = await response.json()
         setData(graphData)
       } catch (error) {
         console.error('Failed to fetch graph data:', error)
+      } finally {
+        setLoading(false)
       }
     }
 
     if (centralWorkId) {
       fetchGraphData()
+    } else {
+      setLoading(false)
     }
   }, [centralWorkId])
 
@@ -126,6 +134,14 @@ export function GraphView({ centralWorkId, onNodeSelect, selectedNodeId }: Graph
     )
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96 text-gray-500 bg-gray-50 rounded-xl border border-gray-200 border-dashed">
+        加载中...
+      </div>
+    )
+  }
+
   if (data.nodes.length === 0) {
     return (
       <div className="flex items-center justify-center h-96 text-gray-500 bg-gray-50 rounded-xl border border-gray-200 border-dashed">
@@ -164,15 +180,15 @@ export function GraphView({ centralWorkId, onNodeSelect, selectedNodeId }: Graph
         <Combobox
           value=""
           onChange={(val) => {
-            const node = data.nodes.find((n) => n.id === val)
-            if (node) {
-              handleNodeClick(node as GraphNodeObject)
+            const selectedNode = data.nodes.find((n) => n.id === val)
+            if (selectedNode) {
+              const graphNode = selectedNode as GraphNodeObject
+              handleNodeClick(graphNode)
               // Zoom to node
               if (fgRef.current) {
                 // ForceGraph adds x/y to nodes after simulation
-                const n = node as any
-                if (typeof n.x === 'number' && typeof n.y === 'number') {
-                  fgRef.current.centerAt(n.x, n.y, 400)
+                if (typeof graphNode.x === 'number' && typeof graphNode.y === 'number') {
+                  fgRef.current.centerAt(graphNode.x, graphNode.y, 400)
                   fgRef.current.zoom(4, 400)
                 }
               }
