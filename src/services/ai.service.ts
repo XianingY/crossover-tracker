@@ -85,7 +85,7 @@ const BLOCKED_DOMAIN_FRAGMENTS = [
   'k2s.cc', 'filefactory', 'nitroflare', 'turbobit',
   // Spam / SEO junk
   'acgyhw', '51chigua', 'qianp.com', 'sodaa.net',
-  'hao123', '360doc', 'toutiao.io',
+  'hao123', '360doc', 'toutiao.io', 'scribd.com',
   // Gambling
   'casino', 'bet365', 'poker', 'slots', 'gambling',
   // URL shorteners (often spam)
@@ -112,6 +112,17 @@ const LOW_QUALITY_CONTENT_KEYWORDS = [
   '免费在线观看', '在线看', '下载地址', '磁力', 'bt下载', '迅雷下载',
   '网盘', '资源分享', '最新地址', '点击进入', '备用网址',
   '破解版', '无删减', '福利视频'
+]
+
+const WORK_HINT_KEYWORDS = [
+  '作品', '系列', '漫画', '动画', '小说', '轻小说', '电影', '剧场版', '电视剧', '游戏',
+  '连载', '原作', '改编', '上映', '播出', 'manga', 'anime', 'novel', 'movie', 'game',
+  'series', 'franchise'
+]
+
+const PERSON_HINT_KEYWORDS = [
+  '声优', '演员', '歌手', '配音', 'cv', '人物', '个人资料', '出生', '生日', '身高', '血型',
+  '代表作', '经纪公司', 'biography', 'actor', 'actress', 'voice actor', 'singer'
 ]
 
 const OFFICIAL_TEXT_MARKERS = [
@@ -276,6 +287,21 @@ function scoreSearchResult(url: string, sourceLevel: SourceLevel, preferOfficial
   return base + levelBonus + nonOfficialPenalty
 }
 
+function normalizeForMatch(value: string): string {
+  return value.toLowerCase().replace(/[\s\p{P}\p{S}_]+/gu, '')
+}
+
+function containsAny(text: string, keywords: string[]): boolean {
+  return keywords.some(keyword => text.includes(keyword.toLowerCase()))
+}
+
+function looksLikePersonEntry(title: string, snippet: string): boolean {
+  const text = `${title} ${snippet}`.toLowerCase()
+  const hasPersonHint = containsAny(text, PERSON_HINT_KEYWORDS)
+  const hasWorkHint = containsAny(text, WORK_HINT_KEYWORDS) || /《[^》]+》/.test(`${title}${snippet}`)
+  return hasPersonHint && !hasWorkHint
+}
+
 function dedupeResults(results: RankedSearchResult[]): RankedSearchResult[] {
   const seen = new Set<string>()
 
@@ -291,6 +317,23 @@ function dedupeResults(results: RankedSearchResult[]): RankedSearchResult[] {
     seen.add(key)
     return true
   })
+}
+
+function mergeSearchResults(primary: SearchResult[], secondary: SearchResult[]): SearchResult[] {
+  const merged: SearchResult[] = []
+  const seen = new Set<string>()
+
+  for (const result of [...primary, ...secondary]) {
+    const key = result.url.trim().toLowerCase()
+    if (!key || seen.has(key)) {
+      continue
+    }
+
+    seen.add(key)
+    merged.push(result)
+  }
+
+  return merged
 }
 
 export async function searchWeb(query: string, options: SearchWebOptions = {}): Promise<SearchResult[]> {
@@ -431,27 +474,62 @@ export async function searchEvidence(workA: string, workB: string): Promise<Sear
 }
 
 export async function identifyWorks(query: string): Promise<WorkCandidate[]> {
-  const results = await searchWeb(query, {
+  const strictResults = await searchWeb(`${query} 作品 动画 漫画 小说 游戏`, {
     preferOfficial: true,
+    officialOrTrustedOnly: true,
     maxResults: 20
   })
 
-  const candidates: WorkCandidate[] = []
+  let results = strictResults
+  if (strictResults.length < 5) {
+    const fallbackResults = await searchWeb(query, {
+      preferOfficial: true,
+      maxResults: 20
+    })
+    results = mergeSearchResults(strictResults, fallbackResults)
+  }
+
+  const scoredCandidates: Array<{ candidate: WorkCandidate; score: number }> = []
   const seen = new Set<string>()
 
   for (const result of results) {
-    const workInfo = extractWorkInfo(result.title, result.snippet, result.url, result.imageUrl)
-    if (workInfo && !seen.has(workInfo.name)) {
-      seen.add(workInfo.name)
-      candidates.push(workInfo)
+    const extracted = extractWorkInfo(result, query)
+    if (!extracted) continue
+
+    const candidateKey = normalizeForMatch(extracted.candidate.name)
+    if (!candidateKey || seen.has(candidateKey)) {
+      continue
     }
+
+    seen.add(candidateKey)
+    scoredCandidates.push(extracted)
   }
 
-  return candidates.slice(0, 10)
+  const candidates = scoredCandidates
+    .sort((a, b) => b.score - a.score)
+    .map(item => item.candidate)
+    .slice(0, 10)
+
+  if (candidates.length === 0 && query.trim()) {
+    candidates.push({
+      name: query.trim(),
+      type: '未知',
+      source: '用户输入',
+      url: '',
+    })
+  }
+
+  return candidates
 }
 
-function extractWorkInfo(title: string, snippet: string, url: string, imageUrl?: string): WorkCandidate | null {
+function extractWorkInfo(
+  result: SearchResult,
+  query: string
+): { candidate: WorkCandidate; score: number } | null {
+  const { title, snippet, url, imageUrl } = result
   const text = title + ' ' + snippet
+  const lowerText = text.toLowerCase()
+  const normalizedQuery = normalizeForMatch(query)
 
   let workName = ''
   let workType = '未知'
@@ -470,30 +548,79 @@ function extractWorkInfo(title: string, snippet: string, url: string, imageUrl?:
 
   if (!workName) return null
 
-  if (text.includes('漫画') || text.includes(' manga') || text.includes(' Comics')) {
+  const normalizedName = normalizeForMatch(workName)
+  const normalizedText = normalizeForMatch(text)
+  const queryMatched =
+    normalizedQuery.length === 0 ||
+    normalizedName.includes(normalizedQuery) ||
+    normalizedText.includes(normalizedQuery)
+
+  const isPersonEntry = looksLikePersonEntry(title, snippet)
+  if (!queryMatched && isPersonEntry) {
+    return null
+  }
+
+  if (isPersonEntry && /维基百科/i.test(title) && !queryMatched) {
+    return null
+  }
+
+  if (!queryMatched && result.sourceLevel === 'other') {
+    return null
+  }
+
+  if (lowerText.includes('漫画') || lowerText.includes(' manga') || lowerText.includes(' comics')) {
     workType = '漫画'
-  } else if (text.includes('动画') || text.includes(' anime') || text.includes(' Anime')) {
+  } else if (lowerText.includes('动画') || lowerText.includes(' anime')) {
     workType = '动画'
-  } else if (text.includes('小说') || text.includes(' novel') || text.includes(' Novel')) {
+  } else if (lowerText.includes('小说') || lowerText.includes(' novel')) {
     workType = '小说'
-  } else if (text.includes('电影') || text.includes(' movie') || text.includes(' Movie') || text.includes('Film')) {
+  } else if (lowerText.includes('电影') || lowerText.includes(' movie') || lowerText.includes('film')) {
     workType = '电影'
-  } else if (text.includes('游戏') || text.includes(' game') || text.includes(' Game')) {
+  } else if (lowerText.includes('游戏') || lowerText.includes(' game')) {
     workType = '游戏'
-  } else if (text.includes('电视剧') || text.includes(' TV') || text.includes('剧集')) {
+  } else if (lowerText.includes('电视剧') || lowerText.includes(' tv') || lowerText.includes('剧集')) {
     workType = '电视剧'
-  } else if (text.includes('轻小说')) {
+  } else if (lowerText.includes('轻小说')) {
     workType = '轻小说'
   }
 
   const source = getSourceName(url)
+  const sourceLevel = result.sourceLevel || 'other'
+
+  let score = 0
+  if (queryMatched) {
+    score += 120
+  } else {
+    score -= 40
+  }
+
+  if (sourceLevel === 'official') {
+    score += 60
+  } else if (sourceLevel === 'trusted') {
+    score += 30
+  }
+
+  if (/《[^》]+》/.test(text)) {
+    score += 20
+  }
+
+  if (isPersonEntry) {
+    score -= 80
+  }
+
+  if (score < 20) {
+    return null
+  }
 
   return {
-    name: workName,
-    type: workType,
-    source,
-    url,
-    imageUrl
+    candidate: {
+      name: workName,
+      type: workType,
+      source,
+      url,
+      imageUrl
+    },
+    score
   }
 }
 

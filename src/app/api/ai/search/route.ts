@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Query is too long (max 120 characters)' }, { status: 400 })
   }
 
-  const cacheKey = `ai-search:${mode}:${query.toLowerCase()}:${workA.toLowerCase()}:${workB.toLowerCase()}`
+  const cacheKey = `ai-search:v2:${mode}:${query.toLowerCase()}:${workA.toLowerCase()}:${workB.toLowerCase()}`
   const cacheTtlMs = getCacheTtlMs(mode)
 
   try {
