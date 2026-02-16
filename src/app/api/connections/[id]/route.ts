@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { GraphService } from '@/services/graph.service'
 
 // 获取联动详情
 export async function GET(
@@ -47,7 +48,7 @@ export async function DELETE(
     })
     
     // 重新计算层级
-    await recalculateLevels()
+    await GraphService.recalculateLevels()
     
     return NextResponse.json({ success: true })
   } catch (error: any) {
@@ -55,46 +56,5 @@ export async function DELETE(
       { error: error.message || 'Failed to delete connection' },
       { status: 400 }
     )
-  }
-}
-
-async function recalculateLevels() {
-  const centralWork = await prisma.work.findFirst({
-    where: { isCentral: true }
-  })
-  
-  if (!centralWork) return
-  
-  const levels = new Map<string, number>()
-  levels.set(centralWork.id, 0)
-  
-  let queue: string[] = [centralWork.id]
-  
-  while (queue.length > 0) {
-    const currentId = queue.shift()!
-    const currentLevel = levels.get(currentId)!
-    
-    const connections = await prisma.connection.findMany({
-      where: {
-        fromWorkId: currentId,
-        evidences: {
-          some: { status: 'APPROVED' }
-        }
-      }
-    })
-    
-    for (const conn of connections) {
-      if (!levels.has(conn.toWorkId)) {
-        levels.set(conn.toWorkId, currentLevel + 1)
-        queue.push(conn.toWorkId)
-      }
-    }
-  }
-  
-  for (const [workId, level] of levels) {
-    await prisma.connection.updateMany({
-      where: { toWorkId: workId },
-      data: { level }
-    })
   }
 }

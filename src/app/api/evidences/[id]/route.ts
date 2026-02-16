@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { GraphService } from '@/services/graph.service'
 
 // 审核证据
 export async function PATCH(
@@ -22,7 +23,7 @@ export async function PATCH(
     
     // 如果批准了证据，触发层级重新计算
     if (status.toUpperCase() === 'APPROVED') {
-      await recalculateLevels()
+      await GraphService.recalculateLevels()
     }
     
     return NextResponse.json(evidence)
@@ -32,51 +33,4 @@ export async function PATCH(
       { status: 400 }
     )
   }
-}
-
-async function recalculateLevels() {
-  const centralWork = await prisma.work.findFirst({
-    where: { isCentral: true }
-  })
-  
-  if (!centralWork) return
-  
-  const levels = new Map<string, number>()
-  levels.set(centralWork.id, 0)
-  
-  let queue = [centralWork.id]
-  
-  while (queue.length > 0) {
-    const currentIds = [...queue]
-    queue = []
-    
-    for (const currentId of currentIds) {
-      const currentLevel = levels.get(currentId)!
-      
-      const connections = await prisma.connection.findMany({
-        where: {
-          fromWorkId: currentId,
-          evidences: {
-            some: { status: 'APPROVED' }
-          }
-        }
-      })
-      
-      for (const conn of connections) {
-        if (!levels.has(conn.toWorkId)) {
-          levels.set(conn.toWorkId, currentLevel + 1)
-          queue.push(conn.toWorkId)
-        }
-      }
-    }
-  }
-  
-  const updates = Array.from(levels.entries()).map(([workId, level]) =>
-    prisma.connection.updateMany({
-      where: { toWorkId: workId },
-      data: { level }
-    })
-  )
-  
-  await prisma.$transaction(updates)
 }
