@@ -20,10 +20,8 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 
 # Database (Supabase)
-# DATABASE_URL: 建议使用 pooler（事务模式）
+# DATABASE_URL: 当前项目仅使用此变量（可用 pooler 或 direct）
 DATABASE_URL=
-# DIRECT_URL: 直连 URL，仅用于 migrate deploy
-DIRECT_URL=
 
 # Redis (Upstash)
 UPSTASH_REDIS_REST_URL=
@@ -81,8 +79,6 @@ npm run db:migrate:deploy
 ```
 
 当前迁移文件已入库：`prisma/migrations`
-
-说明：如果部署环境未设置 `DIRECT_URL`，脚本会自动回退为 `DATABASE_URL`，避免构建失败。
 
 ## Vercel Deployment
 
