@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import ForceGraph2D, { ForceGraphMethods, NodeObject } from 'react-force-graph-2d'
 import { Combobox } from './ui/Combobox'
 
+const LEVEL_COLOR_FALLBACK = ['#d33a4a', '#ea6e2f', '#cf9b22', '#2e9a62', '#2e6dbc', '#6d56b2']
+
 export interface GraphNode {
   id: string
   title: string
@@ -43,6 +45,7 @@ export function GraphView({ centralWorkId, onNodeSelect, selectedNodeId }: Graph
   const [data, setData] = useState<GraphData>({ nodes: [], links: [] })
   const [loading, setLoading] = useState(true)
   const [dimensions, setDimensions] = useState({ width: 800, height: 640 })
+  const levelColorsRef = useRef<string[] | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const fgRef = useRef<ForceGraphMethods<GraphNodeObject, GraphLink> | undefined>(undefined)
 
@@ -88,15 +91,25 @@ export function GraphView({ centralWorkId, onNodeSelect, selectedNodeId }: Graph
   }, [])
 
   // 节点颜色（按层级）
+  const getLevelColors = useCallback(() => {
+    if (levelColorsRef.current) return levelColorsRef.current
+
+    if (typeof window === 'undefined') {
+      levelColorsRef.current = LEVEL_COLOR_FALLBACK
+      return LEVEL_COLOR_FALLBACK
+    }
+
+    const styles = getComputedStyle(document.documentElement)
+    levelColorsRef.current = LEVEL_COLOR_FALLBACK.map((fallback, index) => {
+      const token = styles.getPropertyValue(`--level-${index}`).trim()
+      return token || fallback
+    })
+
+    return levelColorsRef.current
+  }, [])
+
   const getNodeColor = (level: number) => {
-    const colors = [
-      'var(--level-0)',
-      'var(--level-1)',
-      'var(--level-2)',
-      'var(--level-3)',
-      'var(--level-4)',
-      'var(--level-5)',
-    ]
+    const colors = getLevelColors()
     return colors[Math.min(level, 5)]
   }
 
