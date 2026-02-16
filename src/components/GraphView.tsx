@@ -46,7 +46,7 @@ export function GraphView({ centralWorkId, onNodeSelect, selectedNodeId }: Graph
   useEffect(() => {
     async function fetchGraphData() {
       try {
-        const response = await fetch('/api/graph')
+        const response = await fetch(`/api/graph?centralId=${centralWorkId}`)
         const graphData = await response.json()
         setData(graphData)
       } catch (error) {

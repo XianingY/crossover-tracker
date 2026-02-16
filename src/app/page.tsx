@@ -4,13 +4,20 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { Card } from '@/components/ui/Card'
+import { Select } from '@/components/ui/Select'
 import type { GraphNode } from '@/components/GraphView'
 
 const GraphView = dynamic(() => import('@/components/GraphView').then((m) => m.GraphView), {
   ssr: false,
 })
 
+interface CentralWork {
+  id: string
+  title: string
+}
+
 export default function HomePage() {
+  const [centralWorks, setCentralWorks] = useState<CentralWork[]>([])
   const [centralWorkId, setCentralWorkId] = useState<string>('')
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
   const [selectedNodeDetail, setSelectedNodeDetail] = useState<{
@@ -24,22 +31,21 @@ export default function HomePage() {
     connectionsTo: { id: string }[]
   } | null>(null)
   const [panelLoading, setPanelLoading] = useState(false)
-  
+
   useEffect(() => {
-    // 获取中心作品
+    // 获取所有中心作品
     fetch('/api/works/central')
-      .then(res => {
-        if (res.ok) return res.json()
-        throw new Error('No central work')
+      .then(res => res.json())
+      .then((data: CentralWork[]) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setCentralWorks(data)
+          // 默认选中第一个
+          setCentralWorkId(data[0].id)
+        }
       })
-      .then(data => {
-        setCentralWorkId(data.id)
-      })
-      .catch(() => {
-        // 没有中心作品
-      })
+      .catch(console.error)
   }, [])
-  
+
   useEffect(() => {
     if (!selectedNode) return
 
@@ -104,7 +110,7 @@ export default function HomePage() {
         </div>
       </header>
 
-      {!centralWorkId ? (
+      {centralWorks.length === 0 ? (
         <Card className="border-dashed border-slate-300 bg-white/80 text-center">
           <div className="py-20">
             <h2 className="text-2xl font-semibold text-slate-800">还没有中心作品</h2>
@@ -120,9 +126,20 @@ export default function HomePage() {
         </Card>
       ) : (
         <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-900">联动网络</h2>
-          <p className="text-xs text-slate-500">点击节点可在右侧查看详情，按 Esc 可关闭侧栏</p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-4">
+              <h2 className="text-lg font-semibold text-slate-900">联动网络</h2>
+              {centralWorks.length > 1 && (
+                <div className="w-56">
+                  <Select
+                    value={centralWorkId}
+                    onChange={(e) => setCentralWorkId(e.target.value)}
+                    options={centralWorks.map(w => ({ value: w.id, label: w.title }))}
+                  />
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-slate-500">点击节点可在右侧查看详情，按 Esc 可关闭侧栏</p>
           </div>
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px]">
             <GraphView
