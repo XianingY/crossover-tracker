@@ -82,6 +82,8 @@ npm run db:migrate:deploy
 
 当前迁移文件已入库：`prisma/migrations`
 
+说明：如果部署环境未设置 `DIRECT_URL`，脚本会自动回退为 `DATABASE_URL`，避免构建失败。
+
 ## Vercel Deployment
 
 已配置 `vercel.json` 使用：

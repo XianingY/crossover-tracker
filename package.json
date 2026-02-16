@@ -11,8 +11,8 @@
     "test:watch": "vitest",
     "db:generate": "prisma generate",
     "db:migrate:dev": "prisma migrate dev",
-    "db:migrate:deploy": "prisma migrate deploy",
-    "vercel-build": "prisma generate && prisma migrate deploy && next build"
+    "db:migrate:deploy": "node scripts/prisma-migrate-deploy.mjs",
+    "vercel-build": "prisma generate && npm run db:migrate:deploy && next build"
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",
