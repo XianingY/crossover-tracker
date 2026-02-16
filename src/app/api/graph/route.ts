@@ -15,6 +15,7 @@ export interface GraphLink {
   target: string
   relationType: string
   level: number
+  isUnreviewed: boolean
 }
 
 export async function GET(request: NextRequest) {
@@ -63,12 +64,12 @@ export async function GET(request: NextRequest) {
     const connections = await prisma.connection.findMany({
       where: {
         fromWorkId: id,
-        evidences: {
-          some: { status: 'APPROVED' }
-        }
       },
       include: {
-        toWork: true
+        toWork: true,
+        evidences: {
+          select: { status: true }
+        }
       }
     })
 
@@ -91,11 +92,13 @@ export async function GET(request: NextRequest) {
       }
 
       // Add link
+      const isUnreviewed = conn.evidences.length === 0 || conn.evidences.some((e) => e.status === 'PENDING')
       links.push({
         source: conn.fromWorkId,
         target: conn.toWorkId,
         relationType: conn.relationType,
-        level: level + 1
+        level: level + 1,
+        isUnreviewed
       })
     }
   }

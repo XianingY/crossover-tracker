@@ -18,6 +18,7 @@ interface GraphLink {
   target: string
   relationType: string
   level: number
+  isUnreviewed: boolean
 }
 
 interface GraphData {
@@ -144,6 +145,7 @@ export function GraphView({ centralWorkId, onNodeSelect, selectedNodeId }: Graph
         nodeColor={(node: GraphNodeObject) => getNodeColor(node.level || 0)}
         nodeRelSize={6}
         linkColor={() => '#b8c4da'}
+        linkLineDash={(link: GraphLink) => (link.isUnreviewed ? [6, 4] : [])}
         linkWidth={1.5}
         linkDirectionalArrowLength={6}
         linkDirectionalArrowRelPos={1}
