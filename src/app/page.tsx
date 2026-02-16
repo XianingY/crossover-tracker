@@ -93,7 +93,7 @@ export default function HomePage() {
   }
 
   return (
-    <main className="mx-auto max-w-[1800px] px-4 py-8 md:px-8">
+    <main className="w-full max-w-[1920px] px-4 py-8 md:px-8">
       <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-sm font-medium tracking-wide text-slate-500">CROSSOVER TRACKER</p>
@@ -153,21 +153,7 @@ export default function HomePage() {
             </div>
             <p className="text-xs text-slate-500">点击节点可在右侧查看详情，按 Esc 可关闭侧栏</p>
           </div>
-          <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)_300px] xl:grid-cols-[340px_minmax(0,1fr)_340px]">
-            <div className="flex flex-col gap-4">
-              <Card className="h-fit bg-white/90 p-4">
-                <h3 className="text-base font-semibold text-slate-900">层级图例</h3>
-                <p className="mt-1 text-xs text-slate-500">不同颜色表示中心作品向外的联动层级。</p>
-                <div className="mt-3 space-y-2 text-sm text-slate-700">
-                  <div className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: 'var(--level-0)' }}></span>中心</div>
-                  <div className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: 'var(--level-1)' }}></span>一级</div>
-                  <div className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: 'var(--level-2)' }}></span>二级</div>
-                  <div className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: 'var(--level-3)' }}></span>三级</div>
-                  <div className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: 'var(--level-4)' }}></span>四级及以上</div>
-                </div>
-              </Card>
-            </div>
-
+          <div className="grid gap-6 lg:grid-cols-[1fr_320px] xl:grid-cols-[1fr_360px]">
             <GraphView
               centralWorkId={centralWorkId}
               onNodeSelect={handleNodeSelect}

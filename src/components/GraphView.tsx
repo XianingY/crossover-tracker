@@ -213,6 +213,18 @@ export function GraphView({ centralWorkId, onNodeSelect, selectedNodeId }: Graph
         />
       </div>
 
+      {/* Legend Overlay */}
+      <div className="absolute bottom-4 left-4 rounded-lg border border-slate-200/80 bg-white/90 p-3 shadow-sm backdrop-blur">
+        <h4 className="mb-2 text-xs font-semibold text-slate-900">层级图例</h4>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs text-slate-600">
+          <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: 'var(--level-0)' }}></span>中心</div>
+          <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: 'var(--level-1)' }}></span>一级</div>
+          <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: 'var(--level-2)' }}></span>二级</div>
+          <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: 'var(--level-3)' }}></span>三级</div>
+          <div className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ backgroundColor: 'var(--level-4)' }}></span>四级+</div>
+        </div>
+      </div>
+
       {/* Controls */}
       <div className="absolute bottom-4 right-4 flex flex-col gap-2 rounded-lg border border-slate-200 bg-white/90 p-2 shadow-lg backdrop-blur">
         <button
