@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { searchConnections, searchEvidence, identifyWorks } from '@/services/ai.service'
 import { prisma } from '@/lib/prisma'
+import { consumeRateLimit } from '@/lib/rate-limit'
 
 interface ApiConnection {
   fromWork: string
@@ -16,6 +17,22 @@ interface ApiConnection {
 }
 
 export async function GET(request: NextRequest) {
+  const forwardedFor = request.headers.get('x-forwarded-for')
+  const ip = forwardedFor?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'unknown'
+  const rateLimit = consumeRateLimit(`ai-search:${ip}`, 40, 10 * 60 * 1000)
+  if (!rateLimit.ok) {
+    const retryAfterSeconds = Math.ceil(rateLimit.retryAfterMs / 1000)
+    return NextResponse.json(
+      { error: 'Too many AI search requests. Please try again later.' },
+      {
+        status: 429,
+        headers: {
+          'Retry-After': String(retryAfterSeconds)
+        }
+      }
+    )
+  }
+
   const searchParams = request.nextUrl.searchParams
   const query = searchParams.get('q')
   const mode = searchParams.get('mode') || 'identify'
