@@ -176,8 +176,7 @@ export function GraphView({ centralWorkId, onNodeSelect, selectedNodeId }: Graph
         linkColor={() => '#b8c4da'}
         linkLineDash={(link: GraphLink) => (link.isUnreviewed ? [6, 4] : [])}
         linkWidth={1.5}
-        linkDirectionalArrowLength={6}
-        linkDirectionalArrowRelPos={1}
+        linkDirectionalArrowLength={0}
         cooldownTicks={100}
         onNodeClick={handleNodeClick}
         backgroundColor="#fbfcff"
