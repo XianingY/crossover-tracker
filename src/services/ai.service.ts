@@ -33,15 +33,18 @@ export interface WorkConnection {
  * 调用 Minimax API 的通用方法
  */
 async function callMinimaxTool(tool: 'web_search' | 'understand_image', params: Record<string, any>) {
-  if (!MINIMAX_API_KEY) {
-    throw new Error('MINIMAX_API_KEY is not configured')
+  const apiKey = process.env.MINIMAX_API_KEY
+  const apiHost = process.env.MINIMAX_API_HOST || 'https://api.minimaxi.com'
+  
+  if (!apiKey) {
+    throw new Error('MINIMAX_API_KEY is not configured. Please set it in Vercel dashboard or .env file.')
   }
 
-  const response = await fetch(`${MINIMAX_API_HOST}/v1/mcp/tools/call`, {
+  const response = await fetch(`${apiHost}/v1/mcp/tools/call`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${MINIMAX_API_KEY}`
+      'Authorization': `Bearer ${apiKey}`
     },
     body: JSON.stringify({
       tool,
