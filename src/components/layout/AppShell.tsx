@@ -32,18 +32,45 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 />
             )}
 
-            {/* Sidebar */}
-            <aside
-                className={cn(
-                    "fixed lg:static inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200 shadow-sm transform transition-transform duration-200 ease-in-out lg:transform-none flex flex-col",
-                    isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-                )}
-            >
+            {/* Mobile Sidebar (only rendered when open) */}
+            {isSidebarOpen && (
+                <aside className="fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200 shadow-lg flex flex-col lg:hidden">
+                    <div className="px-6 py-6 border-b border-slate-100">
+                        <h1 className="text-xl font-semibold text-slate-900">Crossover Tracker</h1>
+                        <p className="mt-1 text-xs text-slate-500">跨媒介联动关系管理</p>
+                    </div>
+                    <nav className="flex-1 p-4 space-y-1">
+                        {navItems.map((item) => {
+                            const isActive = pathname === item.href
+                            return (
+                                <Link
+                                    key={item.href}
+                                    href={item.href}
+                                    onClick={() => setIsSidebarOpen(false)}
+                                    className={cn(
+                                        "flex items-center px-4 py-2.5 text-sm font-medium rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2",
+                                        isActive
+                                            ? "bg-indigo-600 text-white shadow-sm"
+                                            : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+                                    )}
+                                >
+                                    {item.label}
+                                </Link>
+                            )
+                        })}
+                    </nav>
+                    <div className="p-4 border-t border-slate-100">
+                        <div className="text-xs text-slate-400 text-center">v0.1.0 alpha</div>
+                    </div>
+                </aside>
+            )}
+
+            {/* Desktop Sidebar (always visible on lg+) */}
+            <aside className="hidden lg:flex w-72 flex-col bg-white border-r border-slate-200 shadow-sm shrink-0">
                 <div className="px-6 py-6 border-b border-slate-100">
                     <h1 className="text-xl font-semibold text-slate-900">Crossover Tracker</h1>
                     <p className="mt-1 text-xs text-slate-500">跨媒介联动关系管理</p>
                 </div>
-
                 <nav className="flex-1 p-4 space-y-1">
                     {navItems.map((item) => {
                         const isActive = pathname === item.href
@@ -51,7 +78,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                             <Link
                                 key={item.href}
                                 href={item.href}
-                                onClick={() => setIsSidebarOpen(false)}
                                 className={cn(
                                     "flex items-center px-4 py-2.5 text-sm font-medium rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2",
                                     isActive
@@ -64,11 +90,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                         )
                     })}
                 </nav>
-
                 <div className="p-4 border-t border-slate-100">
-                    <div className="text-xs text-slate-400 text-center">
-                        v0.1.0 alpha
-                    </div>
+                    <div className="text-xs text-slate-400 text-center">v0.1.0 alpha</div>
                 </div>
             </aside>
 
