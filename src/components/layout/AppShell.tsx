@@ -35,7 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {/* Sidebar */}
             <aside
                 className={cn(
-                    "fixed lg:static inset-y-0 left-0 z-50 w-72 bg-white/95 border-r border-slate-200/80 shadow-sm transform transition-transform duration-200 ease-in-out lg:transform-none flex flex-col backdrop-blur",
+                    "fixed lg:static inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200 shadow-sm transform transition-transform duration-200 ease-in-out lg:transform-none flex flex-col",
                     isSidebarOpen ? "translate-x-0" : "-translate-x-full"
                 )}
             >
@@ -75,7 +75,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {/* Main Content */}
             <div className="flex-1 flex flex-col min-w-0">
                 {/* Mobile Header */}
-                <header className="lg:hidden h-16 bg-white/95 border-b border-slate-200 flex items-center px-4 justify-between backdrop-blur">
+                <header className="lg:hidden h-16 bg-white border-b border-slate-200 flex items-center px-4 justify-between">
                     <span className="font-semibold text-slate-900">Crossover Tracker</span>
                     <button
                         onClick={() => setIsSidebarOpen(true)}

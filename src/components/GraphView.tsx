@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import ForceGraph2D, { ForceGraphMethods, NodeObject } from 'react-force-graph-2d'
 import { Combobox } from './ui/Combobox'
 
-const LEVEL_COLOR_FALLBACK = ['#d33a4a', '#ea6e2f', '#cf9b22', '#2e9a62', '#2e6dbc', '#6d56b2']
+const LEVEL_COLOR_FALLBACK = ['#c0444f', '#d4793e', '#b8932e', '#3a8f5e', '#3d6faa', '#6e5fa0']
 
 export interface GraphNode {
   id: string
