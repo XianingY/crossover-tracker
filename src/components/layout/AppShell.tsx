@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { cn } from '../ui/Button'
+import { cn } from '@/lib/utils'
 
 interface NavItem {
     label: string

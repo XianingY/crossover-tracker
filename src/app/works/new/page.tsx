@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { Card } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
+import { Select } from '@/components/ui/Select'
+import { Textarea } from '@/components/ui/Textarea'
 
 const WORK_TYPES = [
   { value: 'novel', label: '小说' },
@@ -20,7 +22,7 @@ const WORK_TYPES = [
 
 export default function NewWorkPage() {
   const router = useRouter()
-  
+
   const [form, setForm] = useState({
     title: '',
     type: 'novel',
@@ -30,29 +32,29 @@ export default function NewWorkPage() {
   })
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
-  
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setErrorMessage('')
-    
+
     const res = await fetch('/api/works', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form)
     })
-    
+
     const data = await res.json()
-    
+
     if (res.ok) {
       router.push('/works')
     } else {
       setErrorMessage(data.error || '创建失败，请稍后重试')
     }
-    
+
     setLoading(false)
   }
-  
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 md:px-8">
       <header className="mb-6 flex items-center justify-between">
@@ -75,29 +77,22 @@ export default function NewWorkPage() {
               placeholder="例如：命运石之门"
             />
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">作品类型</label>
-              <select
-                value={form.type}
-                onChange={e => setForm({ ...form, type: e.target.value })}
-                className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                {WORK_TYPES.map(t => (
-                  <option key={t.value} value={t.value}>{t.label}</option>
-                ))}
-              </select>
-            </div>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">简介</label>
-              <textarea
-                value={form.description}
-                onChange={e => setForm({ ...form, description: e.target.value })}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                rows={4}
-                placeholder="简要介绍作品背景、内容或特色"
-              />
-            </div>
+
+            <Select
+              label="作品类型"
+              value={form.type}
+              onChange={e => setForm({ ...form, type: e.target.value })}
+              options={WORK_TYPES}
+            />
+
+            <Textarea
+              label="简介"
+              value={form.description}
+              onChange={e => setForm({ ...form, description: e.target.value })}
+              rows={4}
+              placeholder="简要介绍作品背景、内容或特色"
+            />
 
             <Input
               label="封面图 URL"

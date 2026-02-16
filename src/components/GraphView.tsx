@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import ForceGraph2D, { ForceGraphMethods, NodeObject } from 'react-force-graph-2d'
+import { Combobox } from './ui/Combobox'
 
 export interface GraphNode {
   id: string
@@ -151,8 +152,34 @@ export function GraphView({ centralWorkId, onNodeSelect, selectedNodeId }: Graph
         backgroundColor="#fbfcff"
       />
 
+      {/* Stats Overlay */}
       <div className="absolute left-4 top-4 rounded-lg border border-slate-200/80 bg-white/90 px-3 py-2 text-xs text-slate-600 backdrop-blur">
         节点 {data.nodes.length} · 连线 {data.links.length}{selectedNodeId ? ` · 已选 ${data.nodes.find((n) => n.id === selectedNodeId)?.title || '节点'}` : ''}
+      </div>
+
+      {/* Search Overlay */}
+      <div className="absolute left-4 top-16 w-64">
+        <Combobox
+          value=""
+          onChange={(val) => {
+            const node = data.nodes.find((n) => n.id === val)
+            if (node) {
+              handleNodeClick(node as GraphNodeObject)
+              // Zoom to node
+              if (fgRef.current) {
+                // ForceGraph adds x/y to nodes after simulation
+                const n = node as any
+                if (typeof n.x === 'number' && typeof n.y === 'number') {
+                  fgRef.current.centerAt(n.x, n.y, 400)
+                  fgRef.current.zoom(4, 400)
+                }
+              }
+            }
+          }}
+          options={data.nodes.map((n) => ({ value: n.id, label: n.title }))}
+          placeholder="搜索节点..."
+          className="bg-white/90 backdrop-blur shadow-sm"
+        />
       </div>
 
       {/* Controls */}
