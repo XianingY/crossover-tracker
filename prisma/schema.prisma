@@ -68,6 +68,7 @@ model Connection {
   
   // 唯一约束：同一对作品同一关系类型只能有一条
   @@unique([fromWorkId, toWorkId, relationType])
+  @@index([fromWorkId, toWorkId, level])
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 }
@@ -103,4 +104,6 @@ model Evidence {
   
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+
+  @@index([connectionId, status, createdAt])
 }

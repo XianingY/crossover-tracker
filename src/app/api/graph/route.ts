@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { EvidenceStatus } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 
 export interface GraphNode {
@@ -18,6 +19,43 @@ export interface GraphLink {
   isUnreviewed: boolean
 }
 
+interface GraphConnectionRecord {
+  fromWorkId: string
+  toWorkId: string
+  relationType: string
+  fromWork: {
+    id: string
+    title: string
+    type: string
+    isCentral: boolean
+    coverUrl: string | null
+  }
+  toWork: {
+    id: string
+    title: string
+    type: string
+    isCentral: boolean
+    coverUrl: string | null
+  }
+  evidences: {
+    status: EvidenceStatus
+  }[]
+}
+
+function buildNode(
+  work: GraphConnectionRecord['fromWork'] | GraphConnectionRecord['toWork'],
+  level: number
+): GraphNode {
+  return {
+    id: work.id,
+    title: work.title,
+    type: work.type,
+    isCentral: work.isCentral,
+    coverUrl: work.coverUrl,
+    level,
+  }
+}
+
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
   const centralId = searchParams.get('centralId')
@@ -27,117 +65,110 @@ export async function GET(request: NextRequest) {
   }
 
   const centralWork = await prisma.work.findUnique({
-    where: { id: centralId }
+    where: { id: centralId },
   })
 
   if (!centralWork) {
     return NextResponse.json({ nodes: [], links: [] })
   }
 
-  // BFS to build graph (bidirectional)
+  const connections = await prisma.connection.findMany({
+    include: {
+      fromWork: true,
+      toWork: true,
+      evidences: { select: { status: true } },
+    },
+  })
+
+  const outgoingByFrom = new Map<string, GraphConnectionRecord[]>()
+  const incomingByTo = new Map<string, GraphConnectionRecord[]>()
+  for (const connection of connections as GraphConnectionRecord[]) {
+    const outgoing = outgoingByFrom.get(connection.fromWorkId) || []
+    outgoing.push(connection)
+    outgoingByFrom.set(connection.fromWorkId, outgoing)
+
+    const incoming = incomingByTo.get(connection.toWorkId) || []
+    incoming.push(connection)
+    incomingByTo.set(connection.toWorkId, incoming)
+  }
+
   const nodes = new Map<string, GraphNode>()
   const links: GraphLink[] = []
   const visited = new Set<string>()
-  const linkSet = new Set<string>() // prevent duplicate links
-  const queue: { id: string; level: number }[] = []
+  const linkSet = new Set<string>()
+  const queue: Array<{ id: string; level: number }> = []
+  const MAX_LEVEL = 5
 
-  // Add central node
   nodes.set(centralWork.id, {
     id: centralWork.id,
     title: centralWork.title,
     type: centralWork.type,
     isCentral: true,
     coverUrl: centralWork.coverUrl,
-    level: 0
+    level: 0,
   })
   visited.add(centralWork.id)
   queue.push({ id: centralWork.id, level: 0 })
 
-  // Max depth to prevent infinite loops or huge graphs
-  const MAX_LEVEL = 5
-
   while (queue.length > 0) {
-    const { id, level } = queue.shift()!
+    const current = queue.shift()
+    if (!current) continue
 
+    const { id, level } = current
     if (level >= MAX_LEVEL) continue
 
-    // Find all outgoing connections from this node
-    const outgoing = await prisma.connection.findMany({
-      where: { fromWorkId: id },
-      include: {
-        toWork: true,
-        evidences: { select: { status: true } }
-      }
-    })
+    const outgoing = outgoingByFrom.get(id) || []
+    const incoming = incomingByTo.get(id) || []
 
-    // Find all incoming connections to this node
-    const incoming = await prisma.connection.findMany({
-      where: { toWorkId: id },
-      include: {
-        fromWork: true,
-        evidences: { select: { status: true } }
-      }
-    })
-
-    for (const conn of outgoing) {
-      const linkKey = `${conn.fromWorkId}-${conn.toWorkId}`
+    for (const connection of outgoing) {
+      const linkKey = `${connection.fromWorkId}-${connection.toWorkId}`
       if (!linkSet.has(linkKey)) {
         linkSet.add(linkKey)
-        const isUnreviewed = conn.evidences.length === 0 || conn.evidences.some((e) => e.status === 'PENDING')
+        const hasApprovedEvidence = connection.evidences.some(
+          evidence => evidence.status === 'APPROVED'
+        )
         links.push({
-          source: conn.fromWorkId,
-          target: conn.toWorkId,
-          relationType: conn.relationType,
+          source: connection.fromWorkId,
+          target: connection.toWorkId,
+          relationType: connection.relationType,
           level: level + 1,
-          isUnreviewed
+          isUnreviewed: !hasApprovedEvidence,
         })
       }
 
-      if (!visited.has(conn.toWorkId)) {
-        visited.add(conn.toWorkId)
-        nodes.set(conn.toWorkId, {
-          id: conn.toWork.id,
-          title: conn.toWork.title,
-          type: conn.toWork.type,
-          isCentral: conn.toWork.isCentral,
-          coverUrl: conn.toWork.coverUrl,
-          level: level + 1
-        })
-        queue.push({ id: conn.toWorkId, level: level + 1 })
+      if (!visited.has(connection.toWorkId)) {
+        visited.add(connection.toWorkId)
+        nodes.set(connection.toWorkId, buildNode(connection.toWork, level + 1))
+        queue.push({ id: connection.toWorkId, level: level + 1 })
       }
     }
 
-    for (const conn of incoming) {
-      const linkKey = `${conn.fromWorkId}-${conn.toWorkId}`
+    for (const connection of incoming) {
+      const linkKey = `${connection.fromWorkId}-${connection.toWorkId}`
       if (!linkSet.has(linkKey)) {
         linkSet.add(linkKey)
-        const isUnreviewed = conn.evidences.length === 0 || conn.evidences.some((e) => e.status === 'PENDING')
+        const hasApprovedEvidence = connection.evidences.some(
+          evidence => evidence.status === 'APPROVED'
+        )
         links.push({
-          source: conn.fromWorkId,
-          target: conn.toWorkId,
-          relationType: conn.relationType,
+          source: connection.fromWorkId,
+          target: connection.toWorkId,
+          relationType: connection.relationType,
           level: level + 1,
-          isUnreviewed
+          isUnreviewed: !hasApprovedEvidence,
         })
       }
 
-      if (!visited.has(conn.fromWorkId)) {
-        visited.add(conn.fromWorkId)
-        nodes.set(conn.fromWorkId, {
-          id: conn.fromWork.id,
-          title: conn.fromWork.title,
-          type: conn.fromWork.type,
-          isCentral: conn.fromWork.isCentral,
-          coverUrl: conn.fromWork.coverUrl,
-          level: level + 1
-        })
-        queue.push({ id: conn.fromWorkId, level: level + 1 })
+      if (!visited.has(connection.fromWorkId)) {
+        visited.add(connection.fromWorkId)
+        nodes.set(connection.fromWorkId, buildNode(connection.fromWork, level + 1))
+        queue.push({ id: connection.fromWorkId, level: level + 1 })
       }
     }
   }
 
   return NextResponse.json({
     nodes: Array.from(nodes.values()),
-    links
+    links,
   })
 }
