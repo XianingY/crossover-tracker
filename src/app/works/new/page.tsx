@@ -57,12 +57,12 @@ export default function NewWorkPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 md:px-8">
-      <header className="mb-6 flex items-center justify-between">
+      <header className="mb-6">
         <div>
+          <Link href="/works" className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white/80 px-2.5 py-1 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2">← 返回列表</Link>
           <p className="text-sm font-medium tracking-wide text-slate-500">NEW WORK</p>
           <h1 className="text-3xl font-semibold text-slate-900">新建作品</h1>
         </div>
-        <Link href="/works" className="text-sm font-medium text-slate-600 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 rounded">返回列表</Link>
       </header>
 
       <div className="grid gap-6 md:grid-cols-[1fr_220px]">
@@ -132,11 +132,11 @@ export default function NewWorkPage() {
           <h2 className="text-sm font-semibold text-slate-800">封面预览</h2>
           <div className="mt-3 aspect-[3/4] overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
             {form.coverUrl ? (
-              <div
-                className="h-full w-full bg-cover bg-center"
-                style={{ backgroundImage: `url(${form.coverUrl})` }}
-                aria-label="封面预览"
-                role="img"
+              <img
+                src={form.coverUrl}
+                alt="封面预览"
+                className="h-full w-full object-cover"
+                referrerPolicy="no-referrer"
               />
             ) : (
               <div className="flex h-full items-center justify-center text-xs text-slate-500">输入 URL 后显示预览</div>

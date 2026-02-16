@@ -70,7 +70,7 @@ export function Combobox({
             <div className="relative">
                 <div
                     className={cn(
-                        "flex h-10 w-full items-center justify-between rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm transition-all cursor-pointer",
+                        "flex h-10 w-full items-center justify-between rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 transition-all cursor-pointer",
                         "focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-transparent",
                         error && "border-rose-500 focus-within:ring-rose-500",
                         disabled && "cursor-not-allowed opacity-50 bg-slate-50",
@@ -107,7 +107,7 @@ export function Combobox({
                             <input
                                 ref={inputRef}
                                 type="text"
-                                className="w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                                className="w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm text-slate-800 placeholder:text-slate-400 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                                 placeholder="搜索..."
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
@@ -123,7 +123,7 @@ export function Combobox({
                                 <div
                                     key={option.value}
                                     className={cn(
-                                        "cursor-pointer px-4 py-2 text-sm hover:bg-indigo-50 hover:text-indigo-700",
+                                        "cursor-pointer px-4 py-2 text-sm text-slate-800 hover:bg-indigo-50 hover:text-indigo-700",
                                         option.value === value && "bg-indigo-50 text-indigo-700 font-medium"
                                     )}
                                     onClick={() => handleSelect(option.value)}

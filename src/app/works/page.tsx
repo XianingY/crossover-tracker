@@ -67,6 +67,7 @@ export default function WorksPage() {
     <div className="mx-auto max-w-6xl px-4 py-8 md:px-8">
       <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
+          <Link href="/" className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white/80 px-2.5 py-1 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2">← 返回图谱概览</Link>
           <p className="text-sm font-medium tracking-wide text-slate-500">WORKS</p>
           <h1 className="text-3xl font-semibold text-slate-900">作品管理</h1>
           <p className="mt-1 text-sm text-slate-600">按类型筛选、搜索并维护作品库。</p>

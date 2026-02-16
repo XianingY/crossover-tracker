@@ -172,11 +172,11 @@ export default function HomePage() {
 
                   <div className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
                     {selectedNodeDetail?.coverUrl || selectedNode.coverUrl ? (
-                      <div
-                        className="h-44 w-full bg-cover bg-center"
-                        style={{ backgroundImage: `url(${selectedNodeDetail?.coverUrl || selectedNode.coverUrl})` }}
-                        role="img"
-                        aria-label={`${selectedNode.title} 封面`}
+                      <img
+                        src={selectedNodeDetail?.coverUrl || selectedNode.coverUrl || ''}
+                        alt={`${selectedNode.title} 封面`}
+                        className="h-44 w-full object-cover"
+                        referrerPolicy="no-referrer"
                       />
                     ) : (
                       <div className="flex h-44 items-center justify-center text-xs text-slate-500">无封面</div>

@@ -61,7 +61,7 @@ export default function WorkDetailPage() {
     <div className="mx-auto max-w-6xl px-4 py-8 md:px-8">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <Link href="/works" className="text-sm font-medium text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 rounded">返回作品列表</Link>
+          <Link href="/works" className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white/80 px-2.5 py-1 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2">← 返回作品列表</Link>
           <h1 className="mt-1 text-3xl font-semibold text-slate-900">{work.title}</h1>
         </div>
         {work.isCentral && (
@@ -73,11 +73,11 @@ export default function WorkDetailPage() {
         <div className="flex flex-col gap-5 sm:flex-row">
           <div className="h-44 w-32 flex-shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
             {work.coverUrl ? (
-              <div
-                className="h-full w-full bg-cover bg-center"
-                style={{ backgroundImage: `url(${work.coverUrl})` }}
-                aria-label={`${work.title} 封面`}
-                role="img"
+              <img
+                src={work.coverUrl}
+                alt={`${work.title} 封面`}
+                className="h-full w-full object-cover"
+                referrerPolicy="no-referrer"
               />
             ) : (
               <div className="flex h-full items-center justify-center text-xs text-slate-500">无封面</div>

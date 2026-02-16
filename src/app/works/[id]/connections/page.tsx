@@ -93,7 +93,7 @@ export default function ConnectionsPage() {
     <div className="mx-auto max-w-6xl px-4 py-8 md:px-8">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <Link href={`/works/${params.id}`} className="text-sm font-medium text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 rounded">返回作品详情</Link>
+          <Link href={`/works/${params.id}`} className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white/80 px-2.5 py-1 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2">← 返回作品详情</Link>
           <h1 className="mt-1 text-3xl font-semibold text-slate-900">联动管理: {work.title}</h1>
         </div>
         <Button
