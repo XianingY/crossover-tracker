@@ -96,6 +96,11 @@ model Evidence {
   
   submittedBy   String?       // 提交者（可选）
   
+  // AI/网页证据来源
+  source        String        @default("USER") // "USER" | "WEB" | "AI"
+  aiConfidence  Float?        // AI分析置信度
+  scrapedAt     DateTime?     // 证据抓取时间
+  
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 }

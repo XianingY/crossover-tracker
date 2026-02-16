@@ -14,6 +14,7 @@ interface NavItem {
 const navItems: NavItem[] = [
     { label: '图谱概览', href: '/' },
     { label: '作品管理', href: '/works' },
+    { label: 'AI 搜索', href: '/search' },
     { label: '添加作品', href: '/works/new' },
     { label: '证据审核页', href: '/admin/evidences' },
 ]
