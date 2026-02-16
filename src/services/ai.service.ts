@@ -1,7 +1,7 @@
 /**
  * AI Search Service
  * 
- * 使用博查AI搜索API (国内可用)
+ * 使用 Tavily Search API
  */
 
 export interface SearchResult {
@@ -24,71 +24,52 @@ export interface WorkConnection {
   evidence: string
 }
 
-function getBochaApiKey(): string | undefined {
-  return process.env.BOCHA_API_KEY
+function getTavilyApiKey(): string | undefined {
+  return process.env.TAVILY_API_KEY
 }
 
 export async function searchWeb(query: string): Promise<SearchResult[]> {
-  const apiKey = getBochaApiKey()
+  const apiKey = getTavilyApiKey()
   
-  if (apiKey) {
-    try {
-      const response = await fetch('https://api.bochaai.com/v1/web-search', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          query,
-          count: 10,
-          summary: true
-        })
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        
-        if (data.webPages?.value) {
-          return data.webPages.value.map((item: any) => ({
-            title: item.name || '',
-            url: item.url || '',
-            snippet: item.summary || item.snippet || ''
-          }))
-        }
-      }
-    } catch (error) {
-      console.error('Bocha API error:', error)
-    }
+  if (!apiKey) {
+    throw new Error('搜索服务未配置。请在 Vercel 后台配置 TAVILY_API_KEY')
   }
 
   try {
-    const encodedQuery = encodeURIComponent(query)
-    const response = await fetch(
-      `https://r.jina.ai/http://ddg-api.herokuapp.com/search?q=${encodedQuery}&limit=10`,
-      {
-        headers: {
-          'Accept': 'application/json'
-        }
-      }
-    )
+    const response = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        api_key: apiKey,
+        query,
+        max_results: 10,
+        include_answer: false,
+        include_raw_content: false,
+        include_images: false
+      })
+    })
 
-    if (response.ok) {
-      const data = await response.json()
-      
-      if (Array.isArray(data) && data.length > 0) {
-        return data.map((item: any) => ({
-          title: item.title || '',
-          url: item.url || '',
-          snippet: item.snippet || item.body || ''
-        }))
-      }
+    if (!response.ok) {
+      throw new Error(`Tavily API error: ${response.status}`)
     }
-  } catch (error) {
-    console.error('Fallback search error:', error)
-  }
 
-  throw new Error('搜索服务暂不可用。请在 Vercel 后台配置 BOCHA_API_KEY')
+    const data = await response.json()
+
+    if (data.results && Array.isArray(data.results)) {
+      return data.results.map((item: any) => ({
+        title: item.title || '',
+        url: item.url || '',
+        snippet: item.content || item.snippet || ''
+      }))
+    }
+
+    return []
+  } catch (error) {
+    console.error('Tavily search error:', error)
+    throw new Error('搜索失败，请稍后重试')
+  }
 }
 
 export async function analyzeImage(
@@ -96,7 +77,7 @@ export async function analyzeImage(
   prompt: string = '这张图片是什么作品？请给出作品名称、类型。'
 ): Promise<ImageAnalysisResult> {
   return {
-    description: `图片分析需要配置付费API。当前图片: ${imageUrl.substring(0, 30)}...`,
+    description: `图片分析功能需要配置付费API。当前图片: ${imageUrl.substring(0, 30)}...`,
     workName: undefined,
     characters: [],
     confidence: 0
