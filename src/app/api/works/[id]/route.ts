@@ -1,6 +1,50 @@
+import { WorkType } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
+import { invalidateGraphSnapshotCache } from '@/lib/graph-cache'
 import { prisma } from '@/lib/prisma'
 import { GraphService } from '@/services/graph.service'
+
+const workTypeSchema = z
+  .string()
+  .trim()
+  .transform(value => value.toUpperCase())
+  .pipe(z.nativeEnum(WorkType))
+
+const nullableTextSchema = z.preprocess(
+  value => {
+    if (value === null) return null
+    if (typeof value !== 'string') return value
+    const trimmed = value.trim()
+    return trimmed.length === 0 ? null : trimmed
+  },
+  z.string().max(2000).nullable().optional()
+)
+
+const nullableUrlSchema = z.preprocess(
+  value => {
+    if (value === null) return null
+    if (typeof value !== 'string') return value
+    const trimmed = value.trim()
+    return trimmed.length === 0 ? null : trimmed
+  },
+  z.string().url().max(2000).nullable().optional()
+)
+
+const updateWorkSchema = z
+  .object({
+    title: z.preprocess(
+      value => (typeof value === 'string' ? value.trim() : value),
+      z.string().min(1).max(200)
+    ).optional(),
+    type: workTypeSchema.optional(),
+    description: nullableTextSchema,
+    coverUrl: nullableUrlSchema,
+    isCentral: z.boolean().optional(),
+  })
+  .refine(data => Object.values(data).some(value => value !== undefined), {
+    message: 'At least one valid field must be provided',
+  })
 
 // 获取作品详情
 export async function GET(
@@ -47,17 +91,24 @@ export async function PUT(
   
   try {
     const body = await request.json()
+    const parsed = updateWorkSchema.safeParse(body)
+    if (!parsed.success) {
+      const message = parsed.error.issues.map(issue => issue.message).join('; ')
+      return NextResponse.json({ error: message || 'Invalid request body' }, { status: 400 })
+    }
 
     const work = await prisma.work.update({
       where: { id },
       data: {
-        title: body.title,
-        type: body.type?.toUpperCase(),
-        description: body.description,
-        coverUrl: body.coverUrl,
-        isCentral: body.isCentral
+        title: parsed.data.title,
+        type: parsed.data.type,
+        description: parsed.data.description,
+        coverUrl: parsed.data.coverUrl,
+        isCentral: parsed.data.isCentral,
       }
     })
+
+    await invalidateGraphSnapshotCache()
     
     return NextResponse.json(work)
   } catch (error) {
@@ -117,7 +168,10 @@ export async function DELETE(
       })
     })
 
-    await GraphService.recalculateLevels()
+    const recalcResult = await GraphService.recalculateLevels()
+    if (!recalcResult.success) {
+      await invalidateGraphSnapshotCache()
+    }
     
     return NextResponse.json({ success: true })
   } catch (error) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { EvidenceStatus } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { withGraphSnapshotCache } from '@/lib/graph-cache'
 
 export interface GraphNode {
   id: string
@@ -56,20 +57,13 @@ function buildNode(
   }
 }
 
-export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams
-  const centralId = searchParams.get('centralId')
-
-  if (!centralId) {
-    return NextResponse.json({ error: 'Central ID is required' }, { status: 400 })
-  }
-
+async function buildGraphSnapshot(centralId: string): Promise<{ nodes: GraphNode[]; links: GraphLink[] }> {
   const centralWork = await prisma.work.findUnique({
     where: { id: centralId },
   })
 
   if (!centralWork) {
-    return NextResponse.json({ nodes: [], links: [] })
+    return { nodes: [], links: [] }
   }
 
   const connections = await prisma.connection.findMany({
@@ -167,8 +161,33 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({
+  return {
     nodes: Array.from(nodes.values()),
     links,
+  }
+}
+
+export async function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams
+  const centralId = searchParams.get('centralId')
+
+  if (!centralId) {
+    return NextResponse.json({ error: 'Central ID is required' }, { status: 400 })
+  }
+
+  const { value: snapshot, hit } = await withGraphSnapshotCache(centralId, async () => {
+    const graph = await buildGraphSnapshot(centralId)
+    return {
+      ...graph,
+      cachedAt: new Date().toISOString(),
+    }
   })
+
+  const response = NextResponse.json({
+    nodes: snapshot.nodes,
+    links: snapshot.links,
+  })
+  response.headers.set('X-Graph-Cache', hit ? 'HIT' : 'MISS')
+  response.headers.set('X-Graph-Cached-At', snapshot.cachedAt)
+  return response
 }

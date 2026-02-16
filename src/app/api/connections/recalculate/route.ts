@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { invalidateGraphSnapshotCache } from '@/lib/graph-cache'
 import { GraphService } from '@/services/graph.service'
 
 /**
@@ -9,6 +10,7 @@ export async function POST() {
     const result = await GraphService.recalculateLevels()
 
     if (!result.success) {
+      await invalidateGraphSnapshotCache()
       return NextResponse.json(
         { error: 'No central work found to calculate limits from.' },
         { status: 400 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { invalidateGraphSnapshotCache } from '@/lib/graph-cache'
 import { prisma } from '@/lib/prisma'
 import { GraphService } from '@/services/graph.service'
 
@@ -48,7 +49,10 @@ export async function DELETE(
     })
     
     // 重新计算层级
-    await GraphService.recalculateLevels()
+    const recalcResult = await GraphService.recalculateLevels()
+    if (!recalcResult.success) {
+      await invalidateGraphSnapshotCache()
+    }
     
     return NextResponse.json({ success: true })
   } catch (error) {

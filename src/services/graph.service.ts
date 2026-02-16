@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { invalidateGraphSnapshotCache } from '@/lib/graph-cache'
 
 /**
  * Service to handle graph-related operations
@@ -82,6 +83,7 @@ export class GraphService {
     )
 
     await prisma.$transaction([resetLevels, ...levelUpdates])
+    await invalidateGraphSnapshotCache()
 
     return {
       success: true,

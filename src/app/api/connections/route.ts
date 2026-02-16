@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
+import { invalidateGraphSnapshotCache } from '@/lib/graph-cache'
 import { prisma } from '@/lib/prisma'
 import { attachPaginationHeaders, parsePaginationParams } from '@/lib/pagination'
 import { GraphService } from '@/services/graph.service'
@@ -117,7 +118,10 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    await GraphService.recalculateLevels()
+    const recalcResult = await GraphService.recalculateLevels()
+    if (!recalcResult.success) {
+      await invalidateGraphSnapshotCache()
+    }
     return NextResponse.json(connection, { status: 201 })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to create connection'
